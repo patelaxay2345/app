@@ -157,11 +157,11 @@ cd frontend
 # Install dependencies
 yarn install
 
-# Create environment file
+# Create environment file from example
 cp .env.example .env
 
-# Edit frontend/.env with backend URL
-echo "REACT_APP_BACKEND_URL=http://localhost:8001" > .env
+# Edit frontend/.env with backend URL (default is fine for local dev)
+# REACT_APP_BACKEND_URL=http://localhost:8001
 ```
 
 **Start frontend development server:**

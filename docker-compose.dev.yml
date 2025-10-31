@@ -1,0 +1,72 @@
+# Docker Compose for Local Development
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: jobtalk_mongodb_dev
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: dev123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_dev_data:/data/db
+    networks:
+      - jobtalk_dev_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: jobtalk_backend_dev
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_URL: mongodb://admin:dev123@mongodb:27017/
+      DB_NAME: recruitment_admin
+      JWT_SECRET: dev-jwt-secret-key
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRY_HOURS: 8
+      ENCRYPTION_KEY: dev-32-byte-encryption-key-123
+      APP_NAME: JobTalk
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: us-east-1
+      SMTP_FROM_EMAIL: dev@jobtalk.com
+      NODE_ENV: development
+      PORT: 8001
+      CORS_ORIGINS: "*"
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend:/app/backend
+    networks:
+      - jobtalk_dev_network
+    command: uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+
+  frontend:
+    image: node:18
+    container_name: jobtalk_frontend_dev
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - jobtalk_dev_network
+    command: yarn start
+
+volumes:
+  mongodb_dev_data:
+    driver: local
+
+networks:
+  jobtalk_dev_network:
+    driver: bridge

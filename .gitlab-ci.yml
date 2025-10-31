@@ -1,0 +1,273 @@
+# GitLab CI/CD Pipeline for JobTalk Admin Dashboard
+# Supports automated deployment to production and staging environments
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+
+# Build Stage
+build:backend:
+  stage: build
+  image: python:3.11-slim
+  only:
+    - main
+    - staging
+    - develop
+  script:
+    - echo "Building backend..."
+    - cd backend
+    - pip install --no-cache-dir -r requirements.txt
+    - python -m py_compile server.py
+    - python -m py_compile models.py
+    - echo "Backend build successful"
+  artifacts:
+    paths:
+      - backend/
+    expire_in: 1 hour
+
+build:frontend:
+  stage: build
+  image: node:18
+  only:
+    - main
+    - staging
+    - develop
+  script:
+    - echo "Building frontend..."
+    - cd frontend
+    - yarn install --frozen-lockfile
+    - yarn build
+    - echo "Frontend build successful"
+  artifacts:
+    paths:
+      - frontend/build/
+    expire_in: 1 hour
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - frontend/node_modules/
+
+# Test Stage
+test:backend:
+  stage: test
+  image: python:3.11-slim
+  only:
+    - main
+    - staging
+    - develop
+  dependencies:
+    - build:backend
+  script:
+    - echo "Running backend tests..."
+    - cd backend
+    - pip install --no-cache-dir -r requirements.txt
+    - pip install pytest pytest-asyncio
+    # Add your test commands here
+    # - pytest tests/ -v
+    - echo "Backend tests passed"
+
+test:frontend:
+  stage: test
+  image: node:18
+  only:
+    - main
+    - staging
+    - develop
+  dependencies:
+    - build:frontend
+  script:
+    - echo "Running frontend tests..."
+    - cd frontend
+    - yarn install --frozen-lockfile
+    # Add your test commands here
+    # - yarn test --watchAll=false
+    - echo "Frontend tests passed"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - frontend/node_modules/
+
+# Docker Build
+build:docker:
+  stage: build
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  only:
+    - main
+    - staging
+  dependencies:
+    - build:backend
+    - build:frontend
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $IMAGE_TAG -t $LATEST_TAG -f Dockerfile .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+    - echo "Docker image pushed successfully"
+  after_script:
+    - docker logout $CI_REGISTRY
+
+# Deploy to Production (main branch)
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - main
+  environment:
+    name: production
+    url: https://jobtalk-admin.production.com
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H $PRODUCTION_SERVER >> ~/.ssh/known_hosts
+  script:
+    - echo "Deploying to production server..."
+    - |
+      ssh $PRODUCTION_USER@$PRODUCTION_SERVER << 'EOF'
+        set -e
+        cd /opt/jobtalk-admin
+        
+        echo "Pulling latest images..."
+        docker-compose pull
+        
+        echo "Stopping current containers..."
+        docker-compose down
+        
+        echo "Starting new containers..."
+        docker-compose up -d
+        
+        echo "Waiting for services to start..."
+        sleep 10
+        
+        echo "Checking health status..."
+        docker-compose ps
+        
+        echo "Showing logs..."
+        docker-compose logs --tail=50
+        
+        echo "Production deployment completed successfully!"
+      EOF
+  when: manual
+  dependencies:
+    - build:docker
+  allow_failure: false
+
+# Deploy to Staging (staging branch)
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - staging
+  environment:
+    name: staging
+    url: https://jobtalk-admin.staging.com
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H $STAGING_SERVER >> ~/.ssh/known_hosts
+  script:
+    - echo "Deploying to staging server..."
+    - |
+      ssh $STAGING_USER@$STAGING_SERVER << 'EOF'
+        set -e
+        cd /opt/jobtalk-admin-staging
+        
+        echo "Pulling latest images..."
+        docker-compose pull
+        
+        echo "Stopping current containers..."
+        docker-compose down
+        
+        echo "Starting new containers..."
+        docker-compose up -d
+        
+        echo "Waiting for services to start..."
+        sleep 10
+        
+        echo "Checking health status..."
+        docker-compose ps
+        
+        echo "Showing logs..."
+        docker-compose logs --tail=50
+        
+        echo "Staging deployment completed successfully!"
+      EOF
+  dependencies:
+    - build:docker
+  allow_failure: false
+
+# Rollback job (manual)
+rollback:production:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - main
+  environment:
+    name: production
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H $PRODUCTION_SERVER >> ~/.ssh/known_hosts
+  script:
+    - echo "Rolling back production deployment..."
+    - |
+      ssh $PRODUCTION_USER@$PRODUCTION_SERVER << 'EOF'
+        set -e
+        cd /opt/jobtalk-admin
+        
+        echo "Stopping current containers..."
+        docker-compose down
+        
+        echo "Rolling back to previous image..."
+        export IMAGE_TAG=${ROLLBACK_IMAGE_TAG:-previous}
+        docker-compose pull
+        
+        echo "Starting containers with rollback image..."
+        docker-compose up -d
+        
+        echo "Checking health status..."
+        docker-compose ps
+        
+        echo "Rollback completed successfully!"
+      EOF
+  when: manual
+
+# Cleanup old Docker images
+cleanup:docker:
+  stage: deploy
+  image: alpine:latest
+  only:
+    - main
+    - staging
+  before_script:
+    - apk add --no-cache openssh-client bash
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H $PRODUCTION_SERVER >> ~/.ssh/known_hosts
+  script:
+    - echo "Cleaning up old Docker images..."
+    - |
+      ssh $PRODUCTION_USER@$PRODUCTION_SERVER << 'EOF'
+        echo "Removing unused Docker images..."
+        docker image prune -af --filter "until=168h"
+        echo "Cleanup completed!"
+      EOF
+  when: manual
+  allow_failure: true

@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: jobtalk_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme123}
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    networks:
+      - jobtalk_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  jobtalk_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${CI_REGISTRY_IMAGE:-jobtalk-admin}:${IMAGE_TAG:-latest}
+    container_name: jobtalk_admin
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      # MongoDB
+      MONGO_URL: mongodb://admin:${MONGO_ROOT_PASSWORD:-changeme123}@mongodb:27017/
+      DB_NAME: recruitment_admin
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-production-2024}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRY_HOURS: 8
+      
+      # Encryption
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-production-32-byte-encryption-key-change-in-production}
+      
+      # AWS SES
+      APP_NAME: JobTalk
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: us-east-1
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@jobtalk.com}
+      
+      # Application
+      NODE_ENV: production
+      PORT: 8001
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    ports:
+      - "80:80"
+      - "8001:8001"
+    volumes:
+      - app_logs:/app/logs
+    networks:
+      - jobtalk_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  mongodb_data:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  jobtalk_network:
+    driver: bridge

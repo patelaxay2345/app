@@ -8,15 +8,18 @@ Usage:
 Required Environment Variables:
   - PARTNER_NAME: Partner name
   - PARTNER_DB_HOST: Database host
-  - PARTNER_DB_PORT: Database port
+  - PARTNER_DB_PORT: Database port (default: 3306)
   - PARTNER_DB_NAME: Database name
   - PARTNER_DB_USER: Database username
   - PARTNER_DB_PASSWORD: Database password
   - PARTNER_SSH_HOST: SSH host
   - PARTNER_SSH_PORT: SSH port (default: 22)
   - PARTNER_SSH_USER: SSH username
-  - PARTNER_SSH_KEY: SSH private key (optional)
-  - PARTNER_SSH_PASSWORD: SSH password (optional, if no key)
+  
+SSH Authentication (choose one):
+  - PARTNER_SSH_PASSWORD: SSH password (recommended, simpler)
+  - PARTNER_SSH_KEY: SSH private key (optional, if no password)
+  - PARTNER_SSH_KEY_PATH: Path to SSH private key file (optional)
 """
 
 import asyncio

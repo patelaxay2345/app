@@ -150,28 +150,28 @@ class DataFetchService:
                 partner,
                 "SELECT COUNT(*) as count FROM campaigns WHERE status = 'RUNNING' AND deleted = 0"
             )
-            running_campaigns = result['rows'][0]['count'] if result and result.get('rows') else 0
+            running_campaigns = result[0]['count'] if result and len(result) > 0 else 0
             
             # Query 2: Campaigns created today
             result = await self.ssh_service.execute_query(
                 partner,
                 "SELECT COUNT(*) as count FROM campaigns WHERE DATE(createdAt) = CURDATE() AND deleted = 0"
             )
-            campaigns_today = result['rows'][0]['count'] if result and result.get('rows') else 0
+            campaigns_today = result[0]['count'] if result and len(result) > 0 else 0
             
             # Query 3: Active calls (INPROGRESS status)
             result = await self.ssh_service.execute_query(
                 partner,
                 "SELECT COUNT(*) as count FROM calls WHERE status = 'INPROGRESS'"
             )
-            active_calls = result['rows'][0]['count'] if result and result.get('rows') else 0
+            active_calls = result[0]['count'] if result and len(result) > 0 else 0
             
             # Query 4: Queued calls (QUEUED status)
             result = await self.ssh_service.execute_query(
                 partner,
                 "SELECT COUNT(*) as count FROM calls WHERE status = 'QUEUED'"
             )
-            queued_calls = result['rows'][0]['count'] if result and result.get('rows') else 0
+            queued_calls = result[0]['count'] if result and len(result) > 0 else 0
             
             metrics = {
                 'campaignsToday': campaigns_today,
@@ -185,6 +185,8 @@ class DataFetchService:
             
         except Exception as e:
             logger.error(f"Error fetching real metrics for {partner.partnerName}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
     
     def _calculate_alert_level(self, metrics: dict, concurrency_limit: int, utilization: float) -> tuple:

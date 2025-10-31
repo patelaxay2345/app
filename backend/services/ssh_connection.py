@@ -221,7 +221,7 @@ class SSHConnectionService:
                         import os
                         try:
                             os.remove(ssh_pkey)
-                        except:
+                        except Exception:
                             pass
             
             # For direct connection (no SSH)

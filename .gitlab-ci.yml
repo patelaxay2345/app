@@ -65,7 +65,7 @@ deploy_production:
         docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
         
         # Update environment variables
-        cat > .env.production << ENVEOF
+        cat > .env.production << 'ENVEOF'
 CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE}
 IMAGE_TAG=latest
 MONGO_URL=${MONGO_URL_PROD}
@@ -82,7 +82,7 @@ SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
 NODE_ENV=production
 PORT=8001
 CORS_ORIGINS=${CORS_ORIGINS_PROD}
-ENVOF
+ENVEOF
         
         # Deploy with docker-compose
         echo "Starting services..."

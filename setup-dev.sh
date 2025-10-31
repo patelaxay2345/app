@@ -106,8 +106,14 @@ log_success "Backend dependencies installed"
 
 # Create backend .env file if it doesn't exist
 if [ ! -f ".env" ]; then
-    log_info "Creating backend .env file..."
-    cat > .env << 'EOF'
+    log_info "Creating backend .env file from example..."
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        log_success "Backend .env file created from .env.example"
+        log_warning "Please update backend/.env with your MongoDB connection string"
+    else
+        log_info "Creating backend .env file with defaults..."
+        cat > .env << 'EOF'
 # Database Configuration
 MONGO_URL="mongodb://localhost:27017"
 DB_NAME="recruitment_admin"
@@ -132,8 +138,9 @@ NODE_ENV="development"
 PORT=8001
 CORS_ORIGINS="*"
 EOF
-    log_success "Backend .env file created"
-    log_warning "Please update backend/.env with your MongoDB connection string"
+        log_success "Backend .env file created"
+        log_warning "Please update backend/.env with your MongoDB connection string"
+    fi
 else
     log_success "Backend .env file already exists"
 fi

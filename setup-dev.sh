@@ -158,13 +158,19 @@ log_success "Frontend dependencies installed"
 
 # Create frontend .env file if it doesn't exist
 if [ ! -f ".env" ]; then
-    log_info "Creating frontend .env file..."
-    cat > .env << 'EOF'
+    log_info "Creating frontend .env file from example..."
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+        log_success "Frontend .env file created from .env.example"
+    else
+        log_info "Creating frontend .env file with defaults..."
+        cat > .env << 'EOF'
 REACT_APP_BACKEND_URL=http://localhost:8001
 REACT_APP_ENABLE_VISUAL_EDITS=false
 ENABLE_HEALTH_CHECK=false
 EOF
-    log_success "Frontend .env file created"
+        log_success "Frontend .env file created"
+    fi
 else
     log_success "Frontend .env file already exists"
 fi

@@ -22,9 +22,12 @@ A comprehensive admin dashboard for managing recruitment partners, monitoring ca
 
 ## 📋 Quick Links
 
-- [🚀 Quick Start Guide](./QUICK_START.md) - Get up and running in 5 minutes
-- [📖 Full Deployment Guide](./DEPLOYMENT.md) - Comprehensive setup instructions
-- [🔧 Development Setup](#development-setup) - Local development guide
+- [🚀 Quick Start Guide](./QUICK_START.md) - Get up and running in 5 minutes (Production Deployment)
+- [📖 Full Deployment Guide](./DEPLOYMENT.md) - Comprehensive production deployment instructions
+- [🔧 Development Setup](#for-local-development) - Quick local development setup
+- [📚 Detailed Setup Guide](./PROJECT_SETUP.md) - Complete development environment setup
+- [✅ Deployment Checklist](./DEPLOYMENT_CHECKLIST.md) - Pre/post deployment checklist
+- [🔄 Workflow Diagrams](./WORKFLOW.md) - Visual deployment workflows
 
 ---
 

@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   jobtalk_app:
-    image: ${CI_REGISTRY_IMAGE}:${IMAGE_TAG:-dev}
-    container_name: jobtalk_admin_dev
+    image: ${CI_REGISTRY_IMAGE}:${IMAGE_TAG:-latest}
+    container_name: jobtalk_admin_prod
     restart: unless-stopped
     environment:
       # MongoDB Atlas
       MONGO_URL: ${MONGO_URL}
-      DB_NAME: ${DB_NAME:-recruitment_admin_dev}
+      DB_NAME: ${DB_NAME:-recruitment_admin_prod}
       
       # JWT Configuration
       JWT_SECRET: ${JWT_SECRET}
@@ -19,18 +19,18 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       
       # AWS SES
-      APP_NAME: ${APP_NAME:-JobTalk-Dev}
+      APP_NAME: ${APP_NAME:-JobTalk}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
       
       # Application
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-8001}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:
-      - "8080:80"
+      - "80:80"
       - "8001:8001"
     volumes:
       - app_logs:/app/logs

@@ -62,8 +62,9 @@ class SSHConfig(BaseModel):
     host: Optional[str] = None
     port: int = 22
     username: Optional[str] = None
-    privateKey: Optional[str] = None
-    passphrase: Optional[str] = None
+    password: Optional[str] = None  # SSH password authentication
+    privateKey: Optional[str] = None  # SSH key authentication
+    passphrase: Optional[str] = None  # Passphrase for private key
 
 class PartnerConfigBase(BaseModel):
     partnerName: str

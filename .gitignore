@@ -90,3 +90,16 @@ android-sdk/
 
 backend/.env
 frontend/.env
+# Test scripts with credentials (should not be committed)
+test-partner-setup.py
+test-ssh-mongo.py
+test-ssh-tunnel.py
+test-mysql-tunnel.py
+add-aptask-partner.py
+
+# Ensure .env files are excluded
+backend/.env
+frontend/.env
+.env
+.env.local
+.env.*.local

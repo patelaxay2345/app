@@ -151,7 +151,7 @@ deploy_dev:
         docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:dev
         
         # Update environment variables
-        cat > .env.dev << ENVEOF
+        cat > .env.dev << 'ENVEOF'
 CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE}
 IMAGE_TAG=dev
 MONGO_URL=${MONGO_URL_DEV}
@@ -168,7 +168,7 @@ SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
 NODE_ENV=development
 PORT=8001
 CORS_ORIGINS=${CORS_ORIGINS_DEV}
-ENVOF
+ENVEOF
         
         # Deploy with docker-compose
         echo "Starting services..."

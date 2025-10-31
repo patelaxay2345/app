@@ -93,126 +93,100 @@ try:
     
     print(f"[3/4] Connecting to MySQL database...")
     
-    # Connect to MySQL through tunnel
-    mysql_conn = pymysql.connect(
-        host='127.0.0.1',
-        port=MYSQL_PORT,
-        user=MYSQL_USER,
-        password=MYSQL_PASS,
-        database=MYSQL_DB,
-        read_timeout=30,
-        write_timeout=30,
-        connect_timeout=30,
-        unix_socket=channel
-    )
+    # PyMySQL doesn't support using channel directly
+    # We need to use the existing SSH connection service approach
+    # Let's use a simpler test - execute MySQL commands via SSH
     
-    print(f"✓ MySQL connection successful")
+    print(f"✓ Testing MySQL connection via SSH command...")
     print()
     
-    print(f"[4/4] Exploring database schema...")
-    print("="*70)
-    print()
+    # Test MySQL connection using command
+    mysql_cmd = f"mysql -h {MYSQL_HOST} -P {MYSQL_PORT} -u {MYSQL_USER} -p'{MYSQL_PASS}' {MYSQL_DB} -e 'SHOW TABLES;' 2>&1"
     
-    cursor = mysql_conn.cursor()
+    stdin, stdout, stderr = ssh_client.exec_command(mysql_cmd, timeout=30)
+    output = stdout.read().decode()
+    error = stderr.read().decode()
     
-    # Get all tables
-    cursor.execute("SHOW TABLES")
-    tables = [table[0] for table in cursor.fetchall()]
-    
-    print(f"Found {len(tables)} tables in '{MYSQL_DB}':")
-    print()
-    
-    # Get row counts for each table
-    table_stats = []
-    for table in tables:
-        try:
-            cursor.execute(f"SELECT COUNT(*) FROM `{table}`")
-            count = cursor.fetchone()[0]
-            table_stats.append((table, count))
-        except Exception as e:
-            table_stats.append((table, f"Error: {str(e)}"))
-    
-    # Sort by count
-    table_stats.sort(key=lambda x: x[1] if isinstance(x[1], int) else 0, reverse=True)
-    
-    # Display tables
-    for i, (table, count) in enumerate(table_stats, 1):
-        if isinstance(count, int):
-            print(f"{i:3d}. {table:50s} : {count:>12,} rows")
-        else:
-            print(f"{i:3d}. {table:50s} : {count}")
-    
-    print()
-    print("="*70)
-    print("Exploring VICIdial tables (campaigns, calls, leads)...")
-    print("="*70)
-    print()
-    
-    # Look for VICIdial tables
-    vicidial_tables = [t for t in tables if 'vicidial' in t.lower() or 'campaign' in t.lower() or 'call' in t.lower()]
-    
-    for table in vicidial_tables[:10]:  # First 10 VICIdial tables
-        print(f"\n📊 Table: {table}")
-        print("-" * 70)
+    if 'ERROR' in error or 'ERROR' in output:
+        print(f"✗ MySQL connection failed:")
+        print(error if error else output)
+    elif output:
+        print(f"✓ MySQL connection successful!")
+        print()
         
-        try:
-            # Get row count
-            cursor.execute(f"SELECT COUNT(*) FROM `{table}`")
-            count = cursor.fetchone()[0]
-            print(f"Total rows: {count:,}")
-            
-            if count > 0:
+        print(f"[4/4] Database tables:")
+        print("="*70)
+        print()
+        
+        # Parse tables
+        lines = output.strip().split('\n')
+        tables = [line.strip() for line in lines[1:] if line.strip()]  # Skip header
+        
+        print(f"Found {len(tables)} tables:")
+        print()
+        
+        # Show first 50 tables
+        for i, table in enumerate(tables[:50], 1):
+            print(f"{i:3d}. {table}")
+        
+        if len(tables) > 50:
+            print(f"     ... and {len(tables) - 50} more tables")
+        
+        print()
+        print("="*70)
+        print("Analyzing VICIdial tables...")
+        print("="*70)
+        print()
+        
+        # Filter VICIdial tables
+        vicidial_tables = [t for t in tables if 'vicidial' in t.lower()]
+        
+        print(f"Found {len(vicidial_tables)} VICIdial tables:")
+        for table in vicidial_tables:
+            print(f"  • {table}")
+        
+        print()
+        
+        # Get details for key tables
+        key_tables = ['vicidial_campaigns', 'vicidial_list', 'vicidial_log', 
+                     'vicidial_auto_calls', 'vicidial_live_agents']
+        
+        for table in key_tables:
+            if table in tables:
+                print(f"\n📊 Table: {table}")
+                print("-" * 70)
+                
+                # Get row count
+                count_cmd = f"mysql -h {MYSQL_HOST} -P {MYSQL_PORT} -u {MYSQL_USER} -p'{MYSQL_PASS}' {MYSQL_DB} -e 'SELECT COUNT(*) FROM {table};' -s -N 2>&1"
+                stdin, stdout, stderr = ssh_client.exec_command(count_cmd, timeout=10)
+                count_output = stdout.read().decode().strip()
+                
+                if count_output.isdigit():
+                    print(f"Total rows: {int(count_output):,}")
+                else:
+                    print(f"Row count: {count_output}")
+                
                 # Get table structure
-                cursor.execute(f"DESCRIBE `{table}`")
-                columns = cursor.fetchall()
+                desc_cmd = f"mysql -h {MYSQL_HOST} -P {MYSQL_PORT} -u {MYSQL_USER} -p'{MYSQL_PASS}' {MYSQL_DB} -e 'DESCRIBE {table};' 2>&1"
+                stdin, stdout, stderr = ssh_client.exec_command(desc_cmd, timeout=10)
+                desc_output = stdout.read().decode()
                 
-                print(f"Columns ({len(columns)}):")
-                for col in columns[:15]:  # First 15 columns
-                    col_name, col_type = col[0], col[1]
-                    print(f"  • {col_name:30s} : {col_type}")
-                
-                if len(columns) > 15:
-                    print(f"  ... and {len(columns) - 15} more columns")
-                
-                # Get sample data
-                print("\nSample row:")
-                cursor.execute(f"SELECT * FROM `{table}` LIMIT 1")
-                sample = cursor.fetchone()
-                
-                if sample:
-                    col_names = [col[0] for col in columns]
-                    for i, (col_name, value) in enumerate(zip(col_names[:10], sample[:10])):
-                        if isinstance(value, str) and len(value) > 60:
-                            value = value[:60] + "..."
-                        print(f"  {col_name}: {value}")
-                    
-                    if len(col_names) > 10:
-                        print(f"  ... and {len(col_names) - 10} more fields")
-        except Exception as e:
-            print(f"Error: {str(e)}")
-    
-    print()
-    print("="*70)
-    print("✓ Database exploration complete!")
-    print("="*70)
-    print()
-    
-    print("Key VICIdial Tables Found:")
-    for table in vicidial_tables[:20]:
-        print(f"  • {table}")
-    
-    # Close connections
-    cursor.close()
-    mysql_conn.close()
-    channel.close()
-    ssh_client.close()
-    
-    print()
-    print("Next Steps:")
-    print("1. Identify tables with active campaign data")
-    print("2. Update data_fetch_service.py to query these tables")
-    print("3. Map VICIdial fields to dashboard models")
-    print()
+                if desc_output and 'ERROR' not in desc_output:
+                    lines = desc_output.strip().split('\n')
+                    print(f"\nColumns ({len(lines)-1}):")
+                    for line in lines[1:11]:  # First 10 columns
+                        parts = line.split('\t')
+                        if len(parts) >= 2:
+                            print(f"  • {parts[0]:30s} : {parts[1]}")
+                    if len(lines) > 11:
+                        print(f"  ... and {len(lines) - 11} more columns")
+        
+        print()
+        print("="*70)
+        print("✓ Database exploration complete!")
+        print("="*70)
+    else:
+        print("✗ No output from MySQL command")
     
 except Exception as e:
     print(f"✗ Error: {str(e)}")

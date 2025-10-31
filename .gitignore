@@ -103,3 +103,8 @@ frontend/.env
 .env
 .env.local
 .env.*.local
+
+# Scripts with potential credentials
+scripts/partner.config
+scripts/*.config
+!scripts/*.config.example

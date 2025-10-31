@@ -157,12 +157,15 @@ async def main():
         "passphrase": None
     }
     
-    if ssh_key:
-        encrypted_ssh_key = encryption_service.encrypt(ssh_key)
-        ssh_config['privateKey'] = encrypted_ssh_key
-    elif ssh_password:
+    # Prioritize password authentication (simpler and more common)
+    if ssh_password:
+        print("   Using SSH password authentication")
         encrypted_ssh_password = encryption_service.encrypt(ssh_password)
         ssh_config['password'] = encrypted_ssh_password
+    elif ssh_key:
+        print("   Using SSH private key authentication")
+        encrypted_ssh_key = encryption_service.encrypt(ssh_key)
+        ssh_config['privateKey'] = encrypted_ssh_key
     
     partner_data = {
         "id": partner_id,

@@ -154,7 +154,6 @@ if [ ! -f ".env" ]; then
     log_info "Creating frontend .env file..."
     cat > .env << 'EOF'
 REACT_APP_BACKEND_URL=http://localhost:8001
-WDS_SOCKET_PORT=3000
 REACT_APP_ENABLE_VISUAL_EDITS=false
 ENABLE_HEALTH_CHECK=false
 EOF

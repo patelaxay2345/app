@@ -40,6 +40,7 @@ class SSHConnectionService:
                         'username': partner.sshConfig.username,
                     }
                     
+                    # Use private key authentication if available
                     if partner.sshConfig.privateKey:
                         # Decrypt and use private key
                         private_key_str = self.encryption_service.decrypt(partner.sshConfig.privateKey)
@@ -53,6 +54,10 @@ class SSHConnectionService:
                             pkey = paramiko.RSAKey.from_private_key(key_file)
                         
                         ssh_kwargs['pkey'] = pkey
+                    # Use password authentication if no private key
+                    elif partner.sshConfig.password:
+                        password = self.encryption_service.decrypt(partner.sshConfig.password)
+                        ssh_kwargs['password'] = password
                     
                     ssh_client.connect(**ssh_kwargs, timeout=30)
                     logger.info(f"SSH connection successful to {partner.partnerName}")

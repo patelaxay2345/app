@@ -72,6 +72,8 @@ After setup completes, start the application:
 
 Access at: `http://localhost:3000` (default login: admin / Admin@2024)
 
+**For detailed setup instructions including troubleshooting, IDE configuration, and more, see [PROJECT_SETUP.md](./PROJECT_SETUP.md)**
+
 ---
 
 #### 📋 Manual Setup

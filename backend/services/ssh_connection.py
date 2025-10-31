@@ -141,135 +141,101 @@ class SSHConnectionService:
                 responseTimeMs=response_time
             )
     
-    async def execute_query(self, partner: PartnerConfig, query: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
-        """Execute query on partner database via SSH tunnel"""
-        start_time = time.time()
+    async def execute_query(self, partner: PartnerConfig, query: str, params: tuple = None):
+        """Execute SQL query on partner database through SSH tunnel"""
+        from sshtunnel import SSHTunnelForwarder
+        import tempfile
         
         try:
-            db_password = self.encryption_service.decrypt(partner.dbPassword)
-            
-            ssh_client = None
-            tunnel = None
-            mysql_conn = None
-            
-            if partner.sshConfig.enabled:
-                ssh_client = paramiko.SSHClient()
-                ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                
-                ssh_kwargs = {
-                    'hostname': partner.sshConfig.host,
-                    'port': partner.sshConfig.port,
-                    'username': partner.sshConfig.username,
-                }
-                
-                # Use private key authentication if available
-                if partner.sshConfig.privateKey:
-                    private_key_str = self.encryption_service.decrypt(partner.sshConfig.privateKey)
-                    from io import StringIO
-                    key_file = StringIO(private_key_str)
-                    
-                    if partner.sshConfig.passphrase:
-                        passphrase = self.encryption_service.decrypt(partner.sshConfig.passphrase)
-                        pkey = paramiko.RSAKey.from_private_key(key_file, password=passphrase)
-                    else:
-                        pkey = paramiko.RSAKey.from_private_key(key_file)
-                    
-                    ssh_kwargs['pkey'] = pkey
-                # Use password authentication if no private key
-                elif partner.sshConfig.password:
-                    password = self.encryption_service.decrypt(partner.sshConfig.password)
-                    ssh_kwargs['password'] = password
-                
-                ssh_client.connect(**ssh_kwargs, timeout=30)
-                
-                # Create SSH tunnel using transport
-                transport = ssh_client.get_transport()
-                
-                # Open channel for MySQL connection
-                # This creates a forwarded connection from local to remote
-                dest_addr = (partner.dbHost, partner.dbPort)
-                local_addr = ('127.0.0.1', 0)
-                
-                channel = transport.open_channel(
-                    'direct-tcpip',
-                    dest_addr,
-                    local_addr
-                )
-                
-                # Create a socket-like object from the channel
-                class ChannelSocket:
-                    def __init__(self, channel):
-                        self.channel = channel
-                    
-                    def sendall(self, data):
-                        return self.channel.sendall(data)
-                    
-                    def recv(self, size):
-                        return self.channel.recv(size)
-                    
-                    def close(self):
-                        return self.channel.close()
-                    
-                    def settimeout(self, timeout):
-                        return self.channel.settimeout(timeout)
-                
-                sock = ChannelSocket(channel)
-                
-                mysql_conn = pymysql.connect(
-                    host=partner.dbHost,  # Use actual host (will go through tunnel)
-                    port=partner.dbPort,
-                    user=partner.dbUsername,
-                    password=db_password,
-                    database=partner.dbName,
-                    connect_timeout=30,
-                    unix_socket=None,
-                    read_timeout=30,
-                    write_timeout=30,
-                    charset='utf8mb4',
-                    cursorclass=pymysql.cursors.DictCursor,
-                    autocommit=True
-                )
-                # Manually set the socket after connection
-                mysql_conn._sock = sock
-            else:
+            if not partner.sshConfig.enabled:
+                # Direct connection without SSH
+                db_password = self.encryption_service.decrypt(partner.dbPassword)
                 mysql_conn = pymysql.connect(
                     host=partner.dbHost,
                     port=partner.dbPort,
                     user=partner.dbUsername,
                     password=db_password,
                     database=partner.dbName,
-                    connect_timeout=30
+                    connect_timeout=30,
+                    cursorclass=pymysql.cursors.DictCursor
                 )
-            
-            cursor = mysql_conn.cursor(pymysql.cursors.DictCursor)
-            cursor.execute(query, params)
-            
-            if query.strip().upper().startswith('SELECT'):
-                result = cursor.fetchall()
             else:
-                mysql_conn.commit()
-                result = {"affected_rows": cursor.rowcount}
+                # Connection through SSH tunnel
+                db_password = self.encryption_service.decrypt(partner.dbPassword)
+                
+                # Prepare SSH authentication
+                ssh_pkey = None
+                ssh_password = None
+                
+                if partner.sshConfig.privateKey:
+                    # Use private key authentication
+                    private_key_str = self.encryption_service.decrypt(partner.sshConfig.privateKey)
+                    
+                    # Write key to temp file for sshtunnel
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem') as key_file:
+                        key_file.write(private_key_str)
+                        key_file_path = key_file.name
+                    
+                    ssh_pkey = key_file_path
+                elif partner.sshConfig.password:
+                    # Use password authentication
+                    ssh_password = self.encryption_service.decrypt(partner.sshConfig.password)
+                
+                # Create SSH tunnel
+                tunnel = SSHTunnelForwarder(
+                    (partner.sshConfig.host, partner.sshConfig.port),
+                    ssh_username=partner.sshConfig.username,
+                    ssh_pkey=ssh_pkey if ssh_pkey else None,
+                    ssh_password=ssh_password if ssh_password else None,
+                    remote_bind_address=(partner.dbHost, partner.dbPort),
+                    local_bind_address=('127.0.0.1', 0)  # Use random local port
+                )
+                
+                tunnel.start()
+                
+                try:
+                    # Connect to MySQL through tunnel
+                    mysql_conn = pymysql.connect(
+                        host='127.0.0.1',
+                        port=tunnel.local_bind_port,
+                        user=partner.dbUsername,
+                        password=db_password,
+                        database=partner.dbName,
+                        connect_timeout=30,
+                        cursorclass=pymysql.cursors.DictCursor
+                    )
+                    
+                    # Execute query
+                    cursor = mysql_conn.cursor()
+                    cursor.execute(query, params)
+                    results = cursor.fetchall()
+                    cursor.close()
+                    mysql_conn.close()
+                    
+                    return results
+                    
+                finally:
+                    tunnel.stop()
+                    # Clean up temp key file
+                    if ssh_pkey:
+                        import os
+                        try:
+                            os.remove(ssh_pkey)
+                        except:
+                            pass
             
+            # For direct connection (no SSH)
+            cursor = mysql_conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
             cursor.close()
+            mysql_conn.close()
             
-            response_time = int((time.time() - start_time) * 1000)
-            await self._log_connection(partner.id, ConnectionStatus.SUCCESS, None, response_time, "query")
-            
-            return result
+            return results
             
         except Exception as e:
-            response_time = int((time.time() - start_time) * 1000)
-            await self._log_connection(partner.id, ConnectionStatus.QUERY_FAILED, str(e), response_time, "query")
-            logger.error(f"Query execution error for {partner.partnerName}: {str(e)}")
-            return None
-        
-        finally:
-            if mysql_conn:
-                mysql_conn.close()
-            if tunnel:
-                tunnel.close()
-            if ssh_client:
-                ssh_client.close()
+            logger.error(f"Error executing query: {str(e)}")
+            raise
     
     async def _log_connection(self, partner_id: str, status: ConnectionStatus, error: Optional[str], response_time: int, query_type: str = "test"):
         """Log connection attempt"""

@@ -68,12 +68,13 @@ class SSHConfig(BaseModel):
 
 class PartnerConfigBase(BaseModel):
     partnerName: str
-    tenantId: int
+    tenantId: int = 0  # Made optional with default
     dbHost: str
-    dbPort: int = 3306
+    dbPort: int = 3306  # Default for MySQL, 27017 for MongoDB
     dbName: str
     dbUsername: str
     dbPassword: str
+    dbType: str = "mysql"  # "mysql" or "mongodb"
     sshConfig: SSHConfig
     concurrencyLimit: int = 10
     isActive: bool = True

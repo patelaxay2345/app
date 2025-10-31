@@ -112,7 +112,7 @@ source venv/bin/activate
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Create environment file
+# Create environment file from example
 cp .env.example .env
 
 # Edit .env file with your configuration
@@ -127,8 +127,17 @@ DB_NAME="recruitment_admin"
 JWT_SECRET="your-super-secret-jwt-key-change-in-production-2024"
 JWT_ALGORITHM="HS256"
 JWT_EXPIRY_HOURS=8
-ENCRYPTION_KEY="this-is-a-32-byte-encryption-key-for-aes256-change-me"
+ENCRYPTION_KEY="your-32-character-encryption-key"
 CORS_ORIGINS="*"
+```
+
+**Generate secure secrets:**
+```bash
+# JWT Secret (64 characters)
+openssl rand -hex 32
+
+# Encryption Key (32 characters)
+openssl rand -base64 32 | head -c 32
 ```
 
 **Start backend server:**

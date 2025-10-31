@@ -42,27 +42,42 @@ python3 scripts/add-partner.py
 | `PARTNER_SSH_HOST` | Yes | SSH server address |
 | `PARTNER_SSH_PORT` | No | SSH port (default: 22) |
 | `PARTNER_SSH_USER` | Yes | SSH username |
-| `PARTNER_SSH_KEY` | Optional* | SSH private key |
-| `PARTNER_SSH_PASSWORD` | Optional* | SSH password |
+| `PARTNER_SSH_PASSWORD` | Optional* | SSH password (recommended) |
+| `PARTNER_SSH_KEY` | Optional* | SSH private key content |
+| `PARTNER_SSH_KEY_PATH` | Optional* | Path to SSH private key file |
 | `PARTNER_CONCURRENCY_LIMIT` | No | Max concurrent calls (default: 50) |
 
-*Either `PARTNER_SSH_KEY` or `PARTNER_SSH_PASSWORD` must be provided.
+*Either `PARTNER_SSH_PASSWORD` or `PARTNER_SSH_KEY`/`PARTNER_SSH_KEY_PATH` must be provided.
 
-**Example:**
+**Example - Using SSH Password (Recommended):**
 
 ```bash
-# Using SSH private key
+# Set variables
 export PARTNER_NAME="ApTask"
 export PARTNER_DB_HOST="db.aptask.com"
 export PARTNER_DB_PORT="3306"
 export PARTNER_DB_NAME="aptask_prod"
 export PARTNER_DB_USER="aptask_user"
-export PARTNER_DB_PASSWORD="secure_password"
+export PARTNER_DB_PASSWORD="secure_db_password"
 export PARTNER_SSH_HOST="ssh.aptask.com"
 export PARTNER_SSH_USER="root"
-export PARTNER_SSH_KEY="$(cat ~/.ssh/aptask_key)"
+export PARTNER_SSH_PASSWORD="secure_ssh_password"
 export PARTNER_CONCURRENCY_LIMIT="100"
 
+# Add partner
+python3 scripts/add-partner.py
+```
+
+**Example - Using SSH Private Key (Optional):**
+
+```bash
+# Method 1: Direct key content
+export PARTNER_SSH_KEY="$(cat ~/.ssh/partner_key)"
+
+# Method 2: Key file path
+export PARTNER_SSH_KEY_PATH="/home/user/.ssh/partner_key"
+
+# Other variables...
 python3 scripts/add-partner.py
 ```
 

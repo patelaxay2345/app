@@ -233,6 +233,337 @@ yarn start
 
 ---
 
+## 💻 Development Workflow
+
+### Project Setup for New Developers
+
+#### 1. Install System Dependencies
+
+**macOS:**
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install python@3.11 node@18 mongodb-community yarn
+```
+
+**Ubuntu/Debian:**
+```bash
+# Update package list
+sudo apt update
+
+# Install Python 3.11
+sudo apt install python3.11 python3.11-venv python3-pip -y
+
+# Install Node.js 18 and Yarn
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install nodejs -y
+npm install -g yarn
+
+# Install MongoDB (optional - use Atlas if preferred)
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt update
+sudo apt install mongodb-org -y
+```
+
+**Windows:**
+- Download Python 3.11: https://www.python.org/downloads/
+- Download Node.js 18: https://nodejs.org/
+- Install Yarn: `npm install -g yarn`
+- MongoDB Atlas recommended (or Docker Desktop with MongoDB)
+
+#### 2. Clone and Setup
+
+```bash
+# Clone repository
+git clone https://gitlab.com/your-username/jobtalk-admin.git
+cd jobtalk-admin
+
+# Create virtual environment for backend
+cd backend
+python3.11 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate  # macOS/Linux
+# OR
+venv\Scripts\activate  # Windows
+
+# Install backend dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Go back to root
+cd ..
+
+# Install frontend dependencies
+cd frontend
+yarn install
+cd ..
+```
+
+#### 3. Setup MongoDB
+
+**Option A: MongoDB Atlas (Recommended)**
+1. Create free account at https://www.mongodb.com/cloud/atlas
+2. Create a new cluster (free M0 tier available)
+3. Create database user
+4. Whitelist your IP address (or use 0.0.0.0/0 for development)
+5. Get connection string
+6. Add to `backend/.env`:
+   ```
+   MONGO_URL="mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority"
+   ```
+
+**Option B: Local MongoDB**
+```bash
+# Start MongoDB service
+# macOS:
+brew services start mongodb-community
+
+# Ubuntu/Linux:
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+# Windows:
+# MongoDB runs as a service automatically after installation
+
+# Use in backend/.env:
+MONGO_URL="mongodb://localhost:27017"
+```
+
+#### 4. Configure Environment Files
+
+**Backend (`backend/.env`):**
+```env
+# Database
+MONGO_URL="mongodb://localhost:27017"
+DB_NAME="recruitment_admin"
+
+# Security
+JWT_SECRET="dev-jwt-secret-change-in-production-minimum-32-chars"
+JWT_ALGORITHM="HS256"
+JWT_EXPIRY_HOURS=8
+ENCRYPTION_KEY="dev-32-character-encryption-key"
+
+# AWS SES (optional for local dev, can use dummy values)
+AWS_ACCESS_KEY_ID="your-aws-key"
+AWS_SECRET_ACCESS_KEY="your-aws-secret"
+AWS_REGION="us-east-1"
+SMTP_FROM_EMAIL="noreply@localhost.com"
+APP_NAME="JobTalk"
+
+# Application
+NODE_ENV="development"
+PORT=8001
+CORS_ORIGINS="*"
+```
+
+**Frontend (`frontend/.env`):**
+```env
+REACT_APP_BACKEND_URL=http://localhost:8001
+WDS_SOCKET_PORT=3000
+```
+
+#### 5. Run Development Servers
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+uvicorn server:app --reload --port 8001
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+yarn start
+```
+
+The application will open automatically at `http://localhost:3000`
+
+### Common Development Tasks
+
+#### Running Tests
+
+**Backend Tests:**
+```bash
+cd backend
+source venv/bin/activate
+pytest
+```
+
+**Frontend Tests:**
+```bash
+cd frontend
+yarn test
+```
+
+#### Code Linting & Formatting
+
+**Backend (Python):**
+```bash
+cd backend
+# Lint with flake8
+flake8 .
+
+# Format with black
+black .
+
+# Type checking with mypy
+mypy .
+```
+
+**Frontend (JavaScript/React):**
+```bash
+cd frontend
+# Lint
+yarn lint
+
+# Format
+yarn format
+```
+
+#### Adding New Dependencies
+
+**Backend:**
+```bash
+cd backend
+source venv/bin/activate
+pip install <package-name>
+pip freeze > requirements.txt  # Update requirements
+```
+
+**Frontend:**
+```bash
+cd frontend
+yarn add <package-name>
+```
+
+#### Database Management
+
+**View MongoDB Data:**
+```bash
+# Connect to local MongoDB
+mongosh
+
+# Or connect to Atlas
+mongosh "your-connection-string"
+
+# List databases
+show dbs
+
+# Use database
+use recruitment_admin
+
+# List collections
+show collections
+
+# Query data
+db.users.find()
+db.partner_configs.find()
+```
+
+**Reset Development Database:**
+```bash
+# In mongosh
+use recruitment_admin
+db.dropDatabase()
+
+# Restart backend - it will recreate default admin user
+```
+
+#### Creating New API Endpoints
+
+1. Add Pydantic model to `backend/models.py`
+2. Add route handler in `backend/server.py`
+3. Test with FastAPI docs at `http://localhost:8001/docs`
+4. Add frontend API call in `frontend/src/utils/api.js`
+5. Create/update React component
+
+#### Creating New Frontend Pages
+
+1. Create page component in `frontend/src/pages/`
+2. Add route in `frontend/src/App.js`
+3. Add navigation link if needed
+4. Style with Tailwind CSS
+
+### Troubleshooting Development Issues
+
+**Backend won't start:**
+```bash
+# Check Python version
+python --version  # Should be 3.11+
+
+# Check if virtual environment is activated
+which python  # Should point to venv
+
+# Check MongoDB connection
+mongosh "your-mongo-url"
+
+# Check port 8001 is not in use
+lsof -i :8001  # macOS/Linux
+netstat -ano | findstr :8001  # Windows
+```
+
+**Frontend won't start:**
+```bash
+# Clear node_modules and reinstall
+rm -rf node_modules yarn.lock
+yarn install
+
+# Check Node version
+node --version  # Should be 18+
+
+# Check port 3000 is not in use
+lsof -i :3000  # macOS/Linux
+netstat -ano | findstr :3000  # Windows
+```
+
+**CORS errors:**
+- Ensure `CORS_ORIGINS="*"` in `backend/.env`
+- Check `REACT_APP_BACKEND_URL` is set correctly in `frontend/.env`
+- Restart backend server after changing CORS settings
+
+**Database connection errors:**
+- Verify MongoDB is running: `mongosh`
+- Check connection string in `backend/.env`
+- For Atlas: ensure IP is whitelisted
+
+### Git Workflow
+
+```bash
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Make changes and commit
+git add .
+git commit -m "Description of changes"
+
+# Push to remote
+git push origin feature/your-feature-name
+
+# Create merge request in GitLab
+# After approval, merge to dev, then to main
+```
+
+### Hot Reload
+
+Both backend and frontend support hot reload:
+- **Backend**: Changes to Python files auto-reload (uvicorn --reload)
+- **Frontend**: Changes to React files auto-reload (React Fast Refresh)
+
+### Environment Variables
+
+Development environment variables are in `.env` files:
+- `backend/.env` - Backend configuration
+- `frontend/.env` - Frontend configuration
+
+**Never commit `.env` files with real secrets!**
+
+---
+
 ## 🚢 Deployment
 
 ### GitLab CI/CD (Recommended)

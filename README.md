@@ -36,6 +36,43 @@ See [QUICK_START.md](./QUICK_START.md) for deploying to Linode with GitLab CI/CD
 
 ### For Local Development
 
+#### 🚀 Automated Setup (Recommended)
+
+**One-Command Setup:**
+```bash
+# Clone repository
+git clone https://gitlab.com/your-username/jobtalk-admin.git
+cd jobtalk-admin
+
+# Run automated setup script
+chmod +x setup-dev.sh
+./setup-dev.sh
+```
+
+The setup script will:
+- ✅ Check all required dependencies
+- ✅ Create Python virtual environment
+- ✅ Install backend dependencies
+- ✅ Install frontend dependencies
+- ✅ Create .env configuration files
+- ✅ Generate helper scripts for starting servers
+
+After setup completes, start the application:
+```bash
+# Option 1: Separate terminals (recommended for development)
+./start-backend.sh  # Terminal 1
+./start-frontend.sh # Terminal 2
+
+# Option 2: Both servers in background
+./start-all.sh
+```
+
+Access at: `http://localhost:3000` (default login: admin / Admin@2024)
+
+---
+
+#### 📋 Manual Setup
+
 #### Prerequisites
 
 Before you begin, ensure you have the following installed:

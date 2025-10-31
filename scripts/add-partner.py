@@ -57,8 +57,18 @@ async def main():
     ssh_host = os.getenv('PARTNER_SSH_HOST')
     ssh_port = int(os.getenv('PARTNER_SSH_PORT', '22'))
     ssh_user = os.getenv('PARTNER_SSH_USER')
-    ssh_key = os.getenv('PARTNER_SSH_KEY')
-    ssh_password = os.getenv('PARTNER_SSH_PASSWORD')
+    ssh_password = os.getenv('PARTNER_SSH_PASSWORD')  # Primary option
+    ssh_key = os.getenv('PARTNER_SSH_KEY')  # Optional
+    ssh_key_path = os.getenv('PARTNER_SSH_KEY_PATH')  # Optional
+    
+    # If key path provided, read the key
+    if ssh_key_path and not ssh_key:
+        try:
+            with open(ssh_key_path, 'r') as f:
+                ssh_key = f.read()
+            print(f"✓ SSH key loaded from: {ssh_key_path}")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not read SSH key from {ssh_key_path}: {e}")
     
     concurrency_limit = int(os.getenv('PARTNER_CONCURRENCY_LIMIT', '50'))
     
@@ -80,12 +90,16 @@ async def main():
         print("Example:")
         print("  export PARTNER_NAME='PartnerName'")
         print("  export PARTNER_DB_HOST='db.example.com'")
+        print("  export PARTNER_SSH_PASSWORD='your_ssh_password'")
         print("  # ... set other variables")
         print("  python3 add-partner.py")
         return
     
-    if not ssh_key and not ssh_password:
-        print("❌ Either PARTNER_SSH_KEY or PARTNER_SSH_PASSWORD must be provided")
+    if not ssh_password and not ssh_key:
+        print("❌ SSH Authentication Required!")
+        print("   You must provide either:")
+        print("     - PARTNER_SSH_PASSWORD (recommended)")
+        print("     - PARTNER_SSH_KEY or PARTNER_SSH_KEY_PATH")
         return
 
     # Connect to MongoDB (your JobTalk database)

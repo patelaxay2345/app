@@ -145,52 +145,33 @@ class DataFetchService:
     async def _fetch_partner_metrics_real(self, partner: PartnerConfig):
         """Fetch REAL data from partner MySQL database via SSH tunnel"""
         try:
-            # Get MySQL connection through SSH tunnel
-            connection = await self.ssh_service.get_connection(partner)
-            
-            if not connection or not connection.get('connection'):
-                logger.error(f"Failed to establish connection for {partner.partnerName}")
-                return None
-            
-            mysql_conn = connection['connection']
-            cursor = mysql_conn.cursor()
-            
             # Query 1: Running campaigns (RUNNING status)
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM campaigns 
-                WHERE status = 'RUNNING' 
-                AND deleted = 0
-            """)
-            running_campaigns = cursor.fetchone()[0]
+            result = await self.ssh_service.execute_query(
+                partner,
+                "SELECT COUNT(*) as count FROM campaigns WHERE status = 'RUNNING' AND deleted = 0"
+            )
+            running_campaigns = result['rows'][0]['count'] if result and result.get('rows') else 0
             
             # Query 2: Campaigns created today
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM campaigns 
-                WHERE DATE(createdAt) = CURDATE() 
-                AND deleted = 0
-            """)
-            campaigns_today = cursor.fetchone()[0]
+            result = await self.ssh_service.execute_query(
+                partner,
+                "SELECT COUNT(*) as count FROM campaigns WHERE DATE(createdAt) = CURDATE() AND deleted = 0"
+            )
+            campaigns_today = result['rows'][0]['count'] if result and result.get('rows') else 0
             
             # Query 3: Active calls (INPROGRESS status)
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM calls 
-                WHERE status = 'INPROGRESS'
-            """)
-            active_calls = cursor.fetchone()[0]
+            result = await self.ssh_service.execute_query(
+                partner,
+                "SELECT COUNT(*) as count FROM calls WHERE status = 'INPROGRESS'"
+            )
+            active_calls = result['rows'][0]['count'] if result and result.get('rows') else 0
             
             # Query 4: Queued calls (QUEUED status)
-            cursor.execute("""
-                SELECT COUNT(*) as count 
-                FROM calls 
-                WHERE status = 'QUEUED'
-            """)
-            queued_calls = cursor.fetchone()[0]
-            
-            cursor.close()
-            mysql_conn.close()
+            result = await self.ssh_service.execute_query(
+                partner,
+                "SELECT COUNT(*) as count FROM calls WHERE status = 'QUEUED'"
+            )
+            queued_calls = result['rows'][0]['count'] if result and result.get('rows') else 0
             
             metrics = {
                 'campaignsToday': campaigns_today,

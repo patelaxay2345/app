@@ -181,20 +181,56 @@ class SSHConnectionService:
                     ssh_kwargs['password'] = password
                 
                 ssh_client.connect(**ssh_kwargs, timeout=30)
-                tunnel = ssh_client.get_transport().open_channel(
+                
+                # Create SSH tunnel using transport
+                transport = ssh_client.get_transport()
+                
+                # Open channel for MySQL connection
+                # This creates a forwarded connection from local to remote
+                dest_addr = (partner.dbHost, partner.dbPort)
+                local_addr = ('127.0.0.1', 0)
+                
+                channel = transport.open_channel(
                     'direct-tcpip',
-                    (partner.dbHost, partner.dbPort),
-                    ('127.0.0.1', 0)
+                    dest_addr,
+                    local_addr
                 )
+                
+                # Create a socket-like object from the channel
+                class ChannelSocket:
+                    def __init__(self, channel):
+                        self.channel = channel
+                    
+                    def sendall(self, data):
+                        return self.channel.sendall(data)
+                    
+                    def recv(self, size):
+                        return self.channel.recv(size)
+                    
+                    def close(self):
+                        return self.channel.close()
+                    
+                    def settimeout(self, timeout):
+                        return self.channel.settimeout(timeout)
+                
+                sock = ChannelSocket(channel)
+                
                 mysql_conn = pymysql.connect(
-                    host='127.0.0.1',
+                    host=partner.dbHost,  # Use actual host (will go through tunnel)
                     port=partner.dbPort,
                     user=partner.dbUsername,
                     password=db_password,
                     database=partner.dbName,
                     connect_timeout=30,
-                    sock=tunnel
+                    unix_socket=None,
+                    read_timeout=30,
+                    write_timeout=30,
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor,
+                    autocommit=True
                 )
+                # Manually set the socket after connection
+                mysql_conn._sock = sock
             else:
                 mysql_conn = pymysql.connect(
                     host=partner.dbHost,

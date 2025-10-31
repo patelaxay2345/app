@@ -22,6 +22,7 @@ Complete guide to all documentation files in this project.
 |----------|---------|----------|------|
 | [README.md](./README.md) | Project overview, features, quick setup | All users | ⭐⭐⭐⭐⭐ |
 | [PROJECT_SETUP.md](./PROJECT_SETUP.md) | Detailed development environment setup | Developers | ⭐⭐⭐⭐ |
+| [ENV_VARIABLES.md](./ENV_VARIABLES.md) | Complete environment variables reference | All users | ⭐⭐⭐ |
 
 ### Deployment Documentation
 

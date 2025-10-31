@@ -17,12 +17,21 @@ export PARTNER_SSH_HOST="ssh.example.com"
 export PARTNER_SSH_PORT="22"
 export PARTNER_SSH_USER="ssh_username"
 
-# SSH Authentication (choose one)
-# Option 1: SSH Private Key
-export PARTNER_SSH_KEY="$(cat ~/.ssh/partner_key)"
+# SSH Authentication (choose one method)
+# ==========================================
 
-# Option 2: SSH Password
-# export PARTNER_SSH_PASSWORD="ssh_password"
+# Method 1: SSH Password (Recommended - Simpler)
+# Just set the password and you're done!
+export PARTNER_SSH_PASSWORD="your_ssh_password"
+
+# Method 2: SSH Private Key (Optional - More secure)
+# Uncomment ONE of these options if you prefer key-based auth
+# Option A: Direct key content
+# export PARTNER_SSH_KEY="$(cat ~/.ssh/partner_key)"
+# Option B: Path to key file
+# export PARTNER_SSH_KEY_PATH="$HOME/.ssh/partner_key"
+
+# ==========================================
 
 # Concurrency Settings
 export PARTNER_CONCURRENCY_LIMIT="50"
@@ -32,3 +41,12 @@ export PARTNER_CONCURRENCY_LIMIT="50"
 # 2. Edit partner.config with your values
 # 3. Source it: source partner.config
 # 4. Run: python3 scripts/add-partner.py
+
+# Quick Example with Password:
+# export PARTNER_NAME="ApTask"
+# export PARTNER_DB_HOST="db.aptask.com"
+# export PARTNER_DB_PASSWORD="db_pass"
+# export PARTNER_SSH_HOST="ssh.aptask.com"
+# export PARTNER_SSH_USER="root"
+# export PARTNER_SSH_PASSWORD="ssh_pass"
+# python3 scripts/add-partner.py

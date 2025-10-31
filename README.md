@@ -36,25 +36,109 @@ See [QUICK_START.md](./QUICK_START.md) for deploying to Linode with GitLab CI/CD
 
 ### For Local Development
 
+#### Prerequisites
+
+Before you begin, ensure you have the following installed:
+- **Python 3.11+** - [Download](https://www.python.org/downloads/)
+- **Node.js 18+** - [Download](https://nodejs.org/)
+- **Yarn** - Run: `npm install -g yarn`
+- **MongoDB** - [Local installation](https://www.mongodb.com/try/download/community) or [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (recommended)
+- **Git** - [Download](https://git-scm.com/downloads)
+
+#### Step 1: Clone Repository
+
 ```bash
-# Clone repository
 git clone https://gitlab.com/your-username/jobtalk-admin.git
 cd jobtalk-admin
+```
 
-# Setup backend
+#### Step 2: Setup Backend
+
+```bash
+# Navigate to backend directory
 cd backend
-cp .env.example .env
-# Edit .env with your MongoDB connection string
-pip install -r requirements.txt
-uvicorn server:app --reload --port 8001
 
-# Setup frontend (in new terminal)
+# Create virtual environment (recommended)
+python -m venv venv
+
+# Activate virtual environment
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Create environment file
+cp .env.example .env
+
+# Edit .env file with your configuration
+# Required: MONGO_URL, JWT_SECRET, ENCRYPTION_KEY
+nano .env  # or use any text editor
+```
+
+**Minimum required environment variables in `backend/.env`:**
+```env
+MONGO_URL="mongodb://localhost:27017"  # Or your MongoDB Atlas connection string
+DB_NAME="recruitment_admin"
+JWT_SECRET="your-super-secret-jwt-key-change-in-production-2024"
+JWT_ALGORITHM="HS256"
+JWT_EXPIRY_HOURS=8
+ENCRYPTION_KEY="this-is-a-32-byte-encryption-key-for-aes256-change-me"
+CORS_ORIGINS="*"
+```
+
+**Start backend server:**
+```bash
+uvicorn server:app --reload --port 8001
+```
+
+Backend will be available at: `http://localhost:8001`
+API documentation at: `http://localhost:8001/docs`
+
+#### Step 3: Setup Frontend (New Terminal)
+
+```bash
+# Navigate to frontend directory
 cd frontend
+
+# Install dependencies
 yarn install
+
+# Create environment file
+cp .env.example .env
+
+# Edit frontend/.env with backend URL
+echo "REACT_APP_BACKEND_URL=http://localhost:8001" > .env
+```
+
+**Start frontend development server:**
+```bash
 yarn start
 ```
 
-Access at: `http://localhost:3000`
+Frontend will automatically open at: `http://localhost:3000`
+
+#### Step 4: Access Application
+
+1. Open browser to `http://localhost:3000`
+2. Login with default credentials:
+   - **Username**: `admin`
+   - **Password**: `Admin@2024`
+3. **⚠️ Important**: Change the default password immediately!
+
+#### Quick Setup Commands
+
+```bash
+# One-command setup (requires separate terminals)
+
+# Terminal 1 - Backend
+cd backend && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && uvicorn server:app --reload --port 8001
+
+# Terminal 2 - Frontend  
+cd frontend && yarn install && yarn start
+```
 
 ---
 

@@ -82,11 +82,8 @@ class DataFetchService:
                 {"$set": {"lastSyncStatus": SyncStatus.IN_PROGRESS.value}}
             )
             
-            # Query partner database for metrics
-            # For this MVP, we'll use mock data since we don't have real partner databases
-            # In production, this would query the actual partner MySQL database
-            
-            metrics = await self._fetch_partner_metrics_mock(partner)
+            # Query partner database for REAL metrics
+            metrics = await self._fetch_partner_metrics_real(partner)
             
             if metrics:
                 # Calculate utilization
@@ -145,17 +142,69 @@ class DataFetchService:
                 }}
             )
     
-    async def _fetch_partner_metrics_mock(self, partner: PartnerConfig):
-        """Mock data fetching - replace with real SSH queries in production"""
-        import random
-        
-        # Generate realistic mock data
-        return {
-            'campaignsToday': random.randint(0, 15),
-            'runningCampaigns': random.randint(5, 35),
-            'activeCalls': random.randint(0, partner.concurrencyLimit),
-            'queuedCalls': random.randint(0, 250),
-        }
+    async def _fetch_partner_metrics_real(self, partner: PartnerConfig):
+        """Fetch REAL data from partner MySQL database via SSH tunnel"""
+        try:
+            # Get MySQL connection through SSH tunnel
+            connection = await self.ssh_service.get_connection(partner)
+            
+            if not connection or not connection.get('connection'):
+                logger.error(f"Failed to establish connection for {partner.partnerName}")
+                return None
+            
+            mysql_conn = connection['connection']
+            cursor = mysql_conn.cursor()
+            
+            # Query 1: Running campaigns (RUNNING status)
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM campaigns 
+                WHERE status = 'RUNNING' 
+                AND deleted = 0
+            """)
+            running_campaigns = cursor.fetchone()[0]
+            
+            # Query 2: Campaigns created today
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM campaigns 
+                WHERE DATE(createdAt) = CURDATE() 
+                AND deleted = 0
+            """)
+            campaigns_today = cursor.fetchone()[0]
+            
+            # Query 3: Active calls (INPROGRESS status)
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM calls 
+                WHERE status = 'INPROGRESS'
+            """)
+            active_calls = cursor.fetchone()[0]
+            
+            # Query 4: Queued calls (QUEUED status)
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM calls 
+                WHERE status = 'QUEUED'
+            """)
+            queued_calls = cursor.fetchone()[0]
+            
+            cursor.close()
+            mysql_conn.close()
+            
+            metrics = {
+                'campaignsToday': campaigns_today,
+                'runningCampaigns': running_campaigns,
+                'activeCalls': active_calls,
+                'queuedCalls': queued_calls,
+            }
+            
+            logger.info(f"Fetched real metrics for {partner.partnerName}: {metrics}")
+            return metrics
+            
+        except Exception as e:
+            logger.error(f"Error fetching real metrics for {partner.partnerName}: {str(e)}")
+            return None
     
     def _calculate_alert_level(self, metrics: dict, concurrency_limit: int, utilization: float) -> tuple:
         """Calculate alert level based on metrics"""

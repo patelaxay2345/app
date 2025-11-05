@@ -195,6 +195,17 @@ function PartnerDetail() {
 
           <TabsContent value="logs" data-testid="logs-content">
             <div className="glass rounded-xl border border-white/10 overflow-hidden">
+              <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-white">Connection Logs</h3>
+                <Button
+                  size="sm"
+                  onClick={handleClearLogs}
+                  className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Clear Logs
+                </Button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-white/5">

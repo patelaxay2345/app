@@ -61,6 +61,40 @@ function Settings() {
     setSettings({ ...settings, [key]: value });
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      await axios.post(`${API}/auth/change-password`, {
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword
+      });
+      
+      toast.success('Password changed successfully');
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>

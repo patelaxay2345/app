@@ -92,11 +92,12 @@ function PartnerDetail() {
           <div className="flex items-center space-x-3">
             <Button
               onClick={handleForceSync}
+              disabled={syncing}
               data-testid="force-sync-button"
               className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30"
             >
-              <RefreshCw className="w-5 h-5 mr-2" />
-              Force Sync
+              <RefreshCw className={`w-5 h-5 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Force Sync'}
             </Button>
             <Button
               onClick={() => navigate('/partners')}

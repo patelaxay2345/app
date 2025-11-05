@@ -126,11 +126,11 @@ backend:
   
   - task: "Handle SSH key update without double encryption"
     implemented: true
-    working: false
+    working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 1
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: "NA"
         agent: "main"
@@ -138,18 +138,24 @@ backend:
       - working: false
         agent: "testing"
         comment: "❌ CRITICAL BUG: SSH update logic has major flaw. When updating sshConfig partially (e.g., only password), the missing fields (privateKey, passphrase) are set to None, losing existing encrypted values. The update replaces entire sshConfig object instead of merging individual fields. This breaks partial SSH credential updates."
+      - working: "NA"
+        agent: "main"
+        comment: "FIXED: Modified update_partner endpoint to merge SSH config fields instead of replacing entire object. Now existing encrypted credentials are preserved when updating only specific SSH fields. Only non-empty values are updated."
   
   - task: "Add backend SSH validation"
-    implemented: false
-    working: false
+    implemented: true
+    working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
       - working: false
         agent: "testing"
         comment: "❌ MISSING VALIDATION: Backend create_partner endpoint lacks validation to ensure at least one of SSH password or privateKey is provided when SSH is enabled. Frontend has this validation, but backend bypasses it, allowing invalid SSH configurations to be stored."
+      - working: "NA"
+        agent: "main"
+        comment: "ADDED: Backend validation in create_partner endpoint. Now checks that at least one of SSH password or privateKey is provided when SSH is enabled. Returns 400 error with clear message if neither is provided."
 
 frontend:
   - task: "Add SSH password field to partner form"

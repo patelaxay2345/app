@@ -261,8 +261,25 @@ function Dashboard() {
 
         {/* Partners Table */}
         <div className="glass rounded-xl border border-white/10 overflow-hidden">
-          <div className="p-6 border-b border-white/10">
+          <div className="p-6 border-b border-white/10 flex items-center justify-between">
             <h3 className="text-xl font-semibold text-white">Partner Breakdown</h3>
+            
+            {/* Partner Filter */}
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-400">Filter by Partner:</label>
+              <select
+                value={selectedPartner}
+                onChange={(e) => setSelectedPartner(e.target.value)}
+                className="bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Partners</option>
+                {partners.map((p) => (
+                  <option key={p.partner.id} value={p.partner.id}>
+                    {p.partner.partnerName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -274,13 +291,13 @@ function Dashboard() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Running</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Active Calls</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Queued</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Utilization</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Concurrency</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {partners.map((partner) => {
+                {filteredPartners.map((partner) => {
                   const snapshot = partner.snapshot;
                   const alertLevel = snapshot?.alertLevel || 'NORMAL';
                   const utilization = snapshot?.utilizationPercent || 0;

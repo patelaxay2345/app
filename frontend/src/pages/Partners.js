@@ -70,6 +70,7 @@ function Partners() {
       }
     }
 
+    setSubmitting(true);
     try {
       // Prepare data - only include sensitive SSH fields if they have values
       const submitData = { ...formData };
@@ -100,6 +101,8 @@ function Partners() {
       resetForm();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Operation failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 

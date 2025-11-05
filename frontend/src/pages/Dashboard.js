@@ -93,6 +93,31 @@ function Dashboard() {
     return badges[alertLevel] || '';
   };
 
+  const handleUpdateConcurrency = async (partnerId, partnerName) => {
+    if (!newConcurrencyValue || newConcurrencyValue < 1 || newConcurrencyValue > 100) {
+      toast.error('Concurrency limit must be between 1 and 100');
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/partners/${partnerId}/concurrency`, {
+        newLimit: parseInt(newConcurrencyValue),
+        reason: 'Updated from dashboard'
+      });
+      
+      toast.success(`Concurrency updated for ${partnerName}`);
+      setEditingConcurrency(null);
+      setNewConcurrencyValue('');
+      fetchDashboardData();
+    } catch (error) {
+      toast.error('Failed to update concurrency');
+    }
+  };
+
+  const filteredPartners = selectedPartner === 'all' 
+    ? partners 
+    : partners.filter(p => p.partner.id === selectedPartner);
+
   if (loading) {
     return (
       <Layout>

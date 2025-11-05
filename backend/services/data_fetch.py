@@ -173,6 +173,26 @@ class DataFetchService:
             )
             queued_calls = result[0]['count'] if result and len(result) > 0 else 0
             
+            # Query 5: Sync concurrency from settings table
+            try:
+                result = await self.ssh_service.execute_query(
+                    partner,
+                    "SELECT value FROM settings WHERE name = 'callConcurrency'"
+                )
+                if result and len(result) > 0:
+                    partner_concurrency = int(result[0]['value'])
+                    # Update our admin MongoDB with the partner's current concurrency
+                    if partner_concurrency != partner.concurrencyLimit:
+                        logger.info(f"Syncing concurrency for {partner.partnerName}: {partner.concurrencyLimit} -> {partner_concurrency}")
+                        await self.db.partner_configs.update_one(
+                            {"id": partner.id},
+                            {"$set": {"concurrencyLimit": partner_concurrency}}
+                        )
+                        partner.concurrencyLimit = partner_concurrency
+            except Exception as e:
+                logger.warning(f"Could not sync concurrency from settings table for {partner.partnerName}: {str(e)}")
+                # Continue with existing concurrency limit if sync fails
+            
             metrics = {
                 'campaignsToday': campaigns_today,
                 'runningCampaigns': running_campaigns,

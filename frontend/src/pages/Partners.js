@@ -401,10 +401,18 @@ function Partners() {
                   </Button>
                   <Button
                     type="submit"
+                    disabled={submitting}
                     data-testid="submit-partner-button"
                     className="bg-gradient-to-r from-blue-500 to-purple-600 text-white"
                   >
-                    {editingPartner ? 'Update' : 'Create'} Partner
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {editingPartner ? 'Updating...' : 'Creating...'}
+                      </>
+                    ) : (
+                      <>{editingPartner ? 'Update' : 'Create'} Partner</>
+                    )}
                   </Button>
                 </div>
               </form>

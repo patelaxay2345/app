@@ -165,6 +165,8 @@ async def create_partner(partner_input: PartnerConfigCreate, current_user: User 
     # Encrypt sensitive data
     partner_dict = partner.model_dump()
     partner_dict['dbPassword'] = encryption_service.encrypt(partner_input.dbPassword)
+    if partner_input.sshConfig.password:
+        partner_dict['sshConfig']['password'] = encryption_service.encrypt(partner_input.sshConfig.password)
     if partner_input.sshConfig.privateKey:
         partner_dict['sshConfig']['privateKey'] = encryption_service.encrypt(partner_input.sshConfig.privateKey)
     if partner_input.sshConfig.passphrase:

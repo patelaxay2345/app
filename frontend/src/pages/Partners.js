@@ -477,10 +477,15 @@ function Partners() {
                         <Button
                           size="sm"
                           onClick={() => handleDelete(partner.id)}
+                          disabled={deleting === partner.id}
                           data-testid="delete-partner-button"
                           className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deleting === partner.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </Button>
                       </div>
                     </td>

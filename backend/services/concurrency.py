@@ -72,6 +72,14 @@ class ConcurrencyService:
     async def _sync_to_partner_db(self, partner: PartnerConfig, new_limit: int) -> dict:
         """Sync concurrency setting to partner's MySQL database"""
         try:
+            # First, get the old value for audit trail
+            get_old_value_query = """
+                SELECT value FROM settings WHERE name = 'callConcurrency'
+            """
+            
+            old_value_result = await self.ssh_service.execute_query(partner, get_old_value_query)
+            old_value = old_value_result[0]['value'] if old_value_result and len(old_value_result) > 0 else None
+            
             # Update settings table
             update_query = """
                 UPDATE settings 
@@ -79,24 +87,33 @@ class ConcurrencyService:
                 WHERE name = 'callConcurrency'
             """
             
-            # Insert audit log entry
-            audit_query = """
-                INSERT INTO settings_auditlogs (userid, name, oldvalue, newvalue, createdat)
-                SELECT 9999999999, 'callConcurrency', value, %s, NOW()
-                FROM settings WHERE name = 'callConcurrency'
-            """
-            
             # Execute update query via SSH tunnel
             affected_rows = await self.ssh_service.execute_update(partner, update_query, (new_limit,))
+            
             if affected_rows > 0:
-                # Insert audit log
-                audit_affected = await self.ssh_service.execute_update(partner, audit_query, (new_limit,))
-                if audit_affected > 0:
-                    logger.info(f"Successfully synced concurrency {new_limit} to partner {partner.partnerName} with audit log")
-                    return {"success": True, "message": "Synced to partner database with audit log"}
-                else:
-                    logger.warning(f"Concurrency updated but audit log failed for partner {partner.partnerName}")
-                    return {"success": True, "message": "Synced to partner database (audit log warning)"}
+                # Try to insert audit log - handle different table structures
+                try:
+                    # Try with 'name' column first (some tables might have it)
+                    audit_query = """
+                        INSERT INTO settings_auditlogs (userid, oldvalue, newvalue, createdat)
+                        VALUES (9999999999, %s, %s, NOW())
+                    """
+                    audit_affected = await self.ssh_service.execute_update(
+                        partner, 
+                        audit_query, 
+                        (old_value, new_limit)
+                    )
+                    
+                    if audit_affected > 0:
+                        logger.info(f"Successfully synced concurrency {new_limit} to partner {partner.partnerName} with audit log")
+                        return {"success": True, "message": "Synced to partner database with audit log"}
+                    else:
+                        logger.warning(f"Concurrency updated but audit log returned 0 rows for partner {partner.partnerName}")
+                        return {"success": True, "message": "Concurrency updated (audit log warning)"}
+                        
+                except Exception as audit_error:
+                    logger.warning(f"Concurrency updated but audit log failed for partner {partner.partnerName}: {str(audit_error)}")
+                    return {"success": True, "message": f"Concurrency updated (audit log failed: {str(audit_error)})"}
             else:
                 return {"success": False, "error": "No rows updated - callConcurrency setting might not exist"}
         

@@ -208,12 +208,11 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Add SSH password field to partner form"
-    - "Fix SSH key double encryption bug"
-    - "Add validation requiring at least one of password or privateKey"
-    - "Encrypt SSH passwords in backend"
-  stuck_tasks: []
-  test_all: true
+    - "Handle SSH key update without double encryption"
+    - "Add backend SSH validation"
+  stuck_tasks:
+    - "Handle SSH key update without double encryption"
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:

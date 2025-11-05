@@ -34,6 +34,7 @@ function Dashboard() {
   const [selectedPartner, setSelectedPartner] = useState('all');
   const [editingConcurrency, setEditingConcurrency] = useState(null);
   const [newConcurrencyValue, setNewConcurrencyValue] = useState('');
+  const [updatingConcurrency, setUpdatingConcurrency] = useState(null);
 
   const fetchDashboardData = async (manual = false) => {
     try {

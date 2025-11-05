@@ -19,6 +19,7 @@ function PartnerDetail() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
 
   useEffect(() => {
     fetchPartnerDetails();

@@ -220,6 +220,8 @@ class DataFetchService:
                 'runningCampaigns': running_campaigns,
                 'activeCalls': active_calls,
                 'queuedCalls': queued_calls,
+                'completedCallsToday': completed_calls_today,
+                'remainingCalls': remaining_calls,
             }
             
             logger.info(f"Fetched real metrics for {partner.partnerName}: {metrics}")

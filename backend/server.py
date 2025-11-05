@@ -199,13 +199,27 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
     if 'dbPassword' in update_dict and update_dict['dbPassword']:
         update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
     
+    # Handle SSH config updates carefully - merge with existing config to avoid losing credentials
     if 'sshConfig' in update_dict:
-        if update_dict['sshConfig'].get('password'):
-            update_dict['sshConfig']['password'] = encryption_service.encrypt(update_dict['sshConfig']['password'])
-        if update_dict['sshConfig'].get('privateKey'):
-            update_dict['sshConfig']['privateKey'] = encryption_service.encrypt(update_dict['sshConfig']['privateKey'])
-        if update_dict['sshConfig'].get('passphrase'):
-            update_dict['sshConfig']['passphrase'] = encryption_service.encrypt(update_dict['sshConfig']['passphrase'])
+        existing_ssh = partner_data.get('sshConfig', {})
+        updated_ssh = update_dict['sshConfig']
+        
+        # Encrypt new credentials if provided
+        if updated_ssh.get('password'):
+            updated_ssh['password'] = encryption_service.encrypt(updated_ssh['password'])
+        if updated_ssh.get('privateKey'):
+            updated_ssh['privateKey'] = encryption_service.encrypt(updated_ssh['privateKey'])
+        if updated_ssh.get('passphrase'):
+            updated_ssh['passphrase'] = encryption_service.encrypt(updated_ssh['passphrase'])
+        
+        # Merge: keep existing encrypted credentials if not provided in update
+        merged_ssh = existing_ssh.copy()
+        for key, value in updated_ssh.items():
+            # Only update if value is not None and not empty string
+            if value is not None and value != '':
+                merged_ssh[key] = value
+        
+        update_dict['sshConfig'] = merged_ssh
     
     update_dict['updatedAt'] = datetime.now(timezone.utc).isoformat()
     

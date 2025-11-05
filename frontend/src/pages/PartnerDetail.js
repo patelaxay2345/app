@@ -60,6 +60,18 @@ function PartnerDetail() {
     }
   };
 
+  const handleClearLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all connection logs for this partner?')) return;
+    
+    try {
+      await axios.delete(`${API}/partners/${partnerId}/logs`);
+      toast.success('Connection logs cleared');
+      fetchPartnerDetails();
+    } catch (error) {
+      toast.error('Failed to clear logs');
+    }
+  };
+
   if (loading) {
     return (
       <Layout>

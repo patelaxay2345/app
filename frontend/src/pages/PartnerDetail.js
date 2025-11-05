@@ -9,6 +9,7 @@ import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Progress } from '../components/ui/progress';
 import { formatDistanceToNow } from 'date-fns';
+import { PartnerDetailSkeleton } from '../components/ui/skeleton';
 
 function PartnerDetail() {
   const { partnerId } = useParams();

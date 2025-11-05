@@ -147,64 +147,68 @@ class DataFetchService:
     async def _fetch_partner_metrics_real(self, partner: PartnerConfig):
         """Fetch REAL data from partner MySQL database via SSH tunnel"""
         try:
-            # Query 1: Running campaigns (RUNNING status)
-            result = await self.ssh_service.execute_query(
-                partner,
-                "SELECT COUNT(*) as count FROM campaigns WHERE status = 'RUNNING' AND deleted = 0"
-            )
-            running_campaigns = result[0]['count'] if result and len(result) > 0 else 0
+            # Prepare all queries to execute in a single batch (single SSH connection)
+            queries = [
+                # Query 1: Running campaigns
+                {
+                    'query': "SELECT COUNT(*) as count FROM campaigns WHERE status = 'RUNNING' AND deleted = 0",
+                    'params': None
+                },
+                # Query 2: Campaigns created today
+                {
+                    'query': "SELECT COUNT(*) as count FROM campaigns WHERE DATE(createdAt) = CURDATE() AND deleted = 0",
+                    'params': None
+                },
+                # Query 3: Active calls
+                {
+                    'query': "SELECT COUNT(*) as count FROM calls WHERE status = 'INPROGRESS'",
+                    'params': None
+                },
+                # Query 4: Queued calls
+                {
+                    'query': "SELECT COUNT(*) as count FROM calls WHERE status = 'QUEUED'",
+                    'params': None
+                },
+                # Query 5: Completed calls today
+                {
+                    'query': "SELECT COUNT(*) as count FROM calls WHERE status = 'COMPLETED' AND DATE(updatedAt) = CURDATE()",
+                    'params': None
+                },
+                # Query 6: Remaining calls
+                {
+                    'query': """
+                        SELECT COUNT(DISTINCT cc.B) as count 
+                        FROM _campaigntocontact cc
+                        INNER JOIN campaigns c ON cc.A = c.id
+                        LEFT JOIN calls ca ON cc.B = ca.contactid AND cc.A = ca.campaignid
+                        WHERE c.status = 'RUNNING' 
+                        AND c.deleted = 0
+                        AND (ca.status IS NULL OR ca.status IN ('QUEUED', 'INPROGRESS'))
+                    """,
+                    'params': None
+                },
+                # Query 7: Concurrency setting
+                {
+                    'query': "SELECT value FROM settings WHERE name = 'callConcurrency'",
+                    'params': None
+                }
+            ]
             
-            # Query 2: Campaigns created today
-            result = await self.ssh_service.execute_query(
-                partner,
-                "SELECT COUNT(*) as count FROM campaigns WHERE DATE(createdAt) = CURDATE() AND deleted = 0"
-            )
-            campaigns_today = result[0]['count'] if result and len(result) > 0 else 0
+            # Execute all queries in a single SSH connection
+            results = await self.ssh_service.execute_batch_queries(partner, queries)
             
-            # Query 3: Active calls (INPROGRESS status)
-            result = await self.ssh_service.execute_query(
-                partner,
-                "SELECT COUNT(*) as count FROM calls WHERE status = 'INPROGRESS'"
-            )
-            active_calls = result[0]['count'] if result and len(result) > 0 else 0
+            # Extract results
+            running_campaigns = results[0][0]['count'] if results[0] and len(results[0]) > 0 else 0
+            campaigns_today = results[1][0]['count'] if results[1] and len(results[1]) > 0 else 0
+            active_calls = results[2][0]['count'] if results[2] and len(results[2]) > 0 else 0
+            queued_calls = results[3][0]['count'] if results[3] and len(results[3]) > 0 else 0
+            completed_calls_today = results[4][0]['count'] if results[4] and len(results[4]) > 0 else 0
+            remaining_calls = results[5][0]['count'] if results[5] and len(results[5]) > 0 else 0
             
-            # Query 4: Queued calls (QUEUED status)
-            result = await self.ssh_service.execute_query(
-                partner,
-                "SELECT COUNT(*) as count FROM calls WHERE status = 'QUEUED'"
-            )
-            queued_calls = result[0]['count'] if result and len(result) > 0 else 0
-            
-            # Query 5: Completed calls today (COMPLETED status)
-            result = await self.ssh_service.execute_query(
-                partner,
-                "SELECT COUNT(*) as count FROM calls WHERE status = 'COMPLETED' AND DATE(updatedAt) = CURDATE()"
-            )
-            completed_calls_today = result[0]['count'] if result and len(result) > 0 else 0
-            
-            # Query 6: Remaining calls (total contacts in running campaigns minus completed/failed calls)
-            result = await self.ssh_service.execute_query(
-                partner,
-                """
-                SELECT COUNT(DISTINCT cc.B) as count 
-                FROM _campaigntocontact cc
-                INNER JOIN campaigns c ON cc.A = c.id
-                LEFT JOIN calls ca ON cc.B = ca.contactid AND cc.A = ca.campaignid
-                WHERE c.status = 'RUNNING' 
-                AND c.deleted = 0
-                AND (ca.status IS NULL OR ca.status IN ('QUEUED', 'INPROGRESS'))
-                """
-            )
-            remaining_calls = result[0]['count'] if result and len(result) > 0 else 0
-            
-            # Query 7: Sync concurrency from settings table
+            # Handle concurrency sync
             try:
-                result = await self.ssh_service.execute_query(
-                    partner,
-                    "SELECT value FROM settings WHERE name = 'callConcurrency'"
-                )
-                if result and len(result) > 0:
-                    partner_concurrency = int(result[0]['value'])
+                if results[6] and len(results[6]) > 0:
+                    partner_concurrency = int(results[6][0]['value'])
                     # Update our admin MongoDB with the partner's current concurrency
                     if partner_concurrency != partner.concurrencyLimit:
                         logger.info(f"Syncing concurrency for {partner.partnerName}: {partner.concurrencyLimit} -> {partner_concurrency}")

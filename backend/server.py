@@ -335,6 +335,17 @@ async def refresh_dashboard(current_user: User = Depends(get_current_user)):
     return {"message": "Dashboard refresh completed"}
 
 # ============= Concurrency Management Routes =============
+@api_router.post("/partners/{partner_id}/concurrency")
+async def update_partner_concurrency(partner_id: str, update: ConcurrencyUpdate, current_user: User = Depends(get_current_user)):
+    """Update concurrency for a specific partner (called from dashboard)"""
+    result = await concurrency_service.update_concurrency(
+        partner_id,
+        update.newLimit,
+        update.reason,
+        current_user.id
+    )
+    return result
+
 @api_router.put("/concurrency/{partner_id}")
 async def update_concurrency(partner_id: str, update: ConcurrencyUpdate, current_user: User = Depends(get_current_user)):
     result = await concurrency_service.update_concurrency(

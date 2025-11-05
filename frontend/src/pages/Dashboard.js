@@ -138,6 +138,35 @@ function Dashboard() {
     ? partners 
     : partners.filter(p => p.partner.id === selectedPartner);
 
+  // Calculate overview metrics based on selected partner filter
+  const filteredOverview = () => {
+    if (selectedOverviewPartner === 'all' || !overview) {
+      return overview;
+    }
+    
+    // Find the specific partner's snapshot
+    const partnerData = partners.find(p => p.partner.id === selectedOverviewPartner);
+    if (!partnerData || !partnerData.snapshot) {
+      return overview;
+    }
+    
+    const snapshot = partnerData.snapshot;
+    return {
+      campaignsToday: snapshot.campaignsToday || 0,
+      runningCampaigns: snapshot.runningCampaigns || 0,
+      activeCalls: snapshot.activeCalls || 0,
+      queuedCalls: snapshot.queuedCalls || 0,
+      completedCallsToday: snapshot.completedCallsToday || 0,
+      remainingCalls: snapshot.remainingCalls || 0,
+      totalPartners: 1,
+      activePartners: partnerData.partner.isActive ? 1 : 0,
+      avgUtilization: snapshot.utilizationPercent || 0,
+      lastUpdated: overview.lastUpdated
+    };
+  };
+
+  const displayOverview = filteredOverview();
+
   if (loading) {
     return (
       <Layout>

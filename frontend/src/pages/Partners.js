@@ -57,12 +57,39 @@ function Partners() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate SSH configuration if enabled
+    if (formData.sshConfig.enabled) {
+      const hasPassword = formData.sshConfig.password && formData.sshConfig.password.trim() !== '';
+      const hasPrivateKey = formData.sshConfig.privateKey && formData.sshConfig.privateKey.trim() !== '';
+      
+      if (!hasPassword && !hasPrivateKey) {
+        toast.error('Please provide either SSH Password or SSH Private Key');
+        return;
+      }
+    }
+
     try {
+      // Prepare data - only include sensitive SSH fields if they have values
+      const submitData = { ...formData };
+      
       if (editingPartner) {
-        await axios.put(`${API}/partners/${editingPartner.id}`, formData);
+        // When editing, only include SSH sensitive fields if user entered new values
+        if (!submitData.sshConfig.password || submitData.sshConfig.password === '') {
+          delete submitData.sshConfig.password;
+        }
+        if (!submitData.sshConfig.privateKey || submitData.sshConfig.privateKey === '') {
+          delete submitData.sshConfig.privateKey;
+        }
+        if (!submitData.sshConfig.passphrase || submitData.sshConfig.passphrase === '') {
+          delete submitData.sshConfig.passphrase;
+        }
+      }
+      
+      if (editingPartner) {
+        await axios.put(`${API}/partners/${editingPartner.id}`, submitData);
         toast.success('Partner updated successfully');
       } else {
-        await axios.post(`${API}/partners`, formData);
+        await axios.post(`${API}/partners`, submitData);
         toast.success('Partner created successfully');
       }
 

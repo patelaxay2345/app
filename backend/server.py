@@ -302,6 +302,8 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
     total_running_campaigns = sum(s['latest']['runningCampaigns'] for s in snapshots)
     total_active_calls = sum(s['latest']['activeCalls'] for s in snapshots)
     total_queued_calls = sum(s['latest']['queuedCalls'] for s in snapshots)
+    total_completed_calls_today = sum(s['latest'].get('completedCallsToday', 0) for s in snapshots)
+    total_remaining_calls = sum(s['latest'].get('remainingCalls', 0) for s in snapshots)
     
     active_partners = sum(1 for p in partners if p.get('isActive', True))
     avg_utilization = sum(s['latest']['utilizationPercent'] for s in snapshots) / len(snapshots) if snapshots else 0
@@ -311,6 +313,8 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
         runningCampaigns=total_running_campaigns,
         activeCalls=total_active_calls,
         queuedCalls=total_queued_calls,
+        completedCallsToday=total_completed_calls_today,
+        remainingCalls=total_remaining_calls,
         totalPartners=len(partners),
         activePartners=active_partners,
         avgUtilization=avg_utilization,

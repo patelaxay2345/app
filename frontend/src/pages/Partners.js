@@ -514,6 +514,7 @@ function Partners() {
           )}
         </div>
       </div>
+      )}
     </Layout>
   );
 }

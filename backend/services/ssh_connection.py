@@ -17,80 +17,114 @@ class SSHConnectionService:
     
     async def test_connection(self, partner: PartnerConfig) -> TestConnectionResponse:
         """Test SSH tunnel and MySQL connection"""
+        from sshtunnel import SSHTunnelForwarder
+        import tempfile
+        
         start_time = time.time()
         
         try:
             # Decrypt credentials
             db_password = self.encryption_service.decrypt(partner.dbPassword)
             
-            ssh_client = None
-            tunnel = None
             mysql_conn = None
+            tunnel = None
             
             if partner.sshConfig.enabled:
-                # Test SSH connection
+                # Test SSH connection with tunnel
                 try:
-                    ssh_client = paramiko.SSHClient()
-                    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    # Prepare SSH authentication
+                    ssh_pkey = None
+                    ssh_password = None
                     
-                    # Prepare SSH credentials
-                    ssh_kwargs = {
-                        'hostname': partner.sshConfig.host,
-                        'port': partner.sshConfig.port,
-                        'username': partner.sshConfig.username,
-                    }
-                    
-                    # Use private key authentication if available
                     if partner.sshConfig.privateKey:
-                        # Decrypt and use private key
+                        # Use private key authentication
                         private_key_str = self.encryption_service.decrypt(partner.sshConfig.privateKey)
-                        from io import StringIO
-                        key_file = StringIO(private_key_str)
                         
-                        if partner.sshConfig.passphrase:
-                            passphrase = self.encryption_service.decrypt(partner.sshConfig.passphrase)
-                            pkey = paramiko.RSAKey.from_private_key(key_file, password=passphrase)
-                        else:
-                            pkey = paramiko.RSAKey.from_private_key(key_file)
+                        # Write key to temp file for sshtunnel
+                        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem') as key_file:
+                            key_file.write(private_key_str)
+                            key_file_path = key_file.name
                         
-                        ssh_kwargs['pkey'] = pkey
-                    # Use password authentication if no private key
+                        ssh_pkey = key_file_path
                     elif partner.sshConfig.password:
-                        password = self.encryption_service.decrypt(partner.sshConfig.password)
-                        ssh_kwargs['password'] = password
+                        # Use password authentication
+                        ssh_password = self.encryption_service.decrypt(partner.sshConfig.password)
                     
-                    ssh_client.connect(**ssh_kwargs, timeout=30)
-                    logger.info(f"SSH connection successful to {partner.partnerName}")
+                    # Create SSH tunnel
+                    tunnel = SSHTunnelForwarder(
+                        (partner.sshConfig.host, partner.sshConfig.port),
+                        ssh_username=partner.sshConfig.username,
+                        ssh_pkey=ssh_pkey if ssh_pkey else None,
+                        ssh_password=ssh_password if ssh_password else None,
+                        remote_bind_address=(partner.dbHost, partner.dbPort),
+                        local_bind_address=('127.0.0.1', 0)  # Use random local port
+                    )
+                    
+                    tunnel.start()
+                    logger.info(f"SSH tunnel established to {partner.partnerName}")
+                    
+                    # Connect to MySQL through tunnel
+                    mysql_conn = pymysql.connect(
+                        host='127.0.0.1',
+                        port=tunnel.local_bind_port,
+                        user=partner.dbUsername,
+                        password=db_password,
+                        database=partner.dbName,
+                        connect_timeout=30
+                    )
+                    
+                    # Test query
+                    cursor = mysql_conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                    cursor.close()
+                    mysql_conn.close()
+                    
+                    response_time = int((time.time() - start_time) * 1000)
+                    
+                    # Clean up
+                    tunnel.stop()
+                    if ssh_pkey:
+                        import os
+                        try:
+                            os.remove(ssh_pkey)
+                        except Exception:
+                            pass
+                    
+                    await self._log_connection(partner.id, ConnectionStatus.SUCCESS, None, response_time)
+                    
+                    return TestConnectionResponse(
+                        success=True,
+                        message="Connection successful via SSH tunnel",
+                        responseTimeMs=response_time,
+                        details={"database": partner.dbName, "via_ssh": True}
+                    )
                     
                 except Exception as e:
                     response_time = int((time.time() - start_time) * 1000)
+                    
+                    # Clean up on error
+                    if tunnel:
+                        try:
+                            tunnel.stop()
+                        except:
+                            pass
+                    if ssh_pkey:
+                        import os
+                        try:
+                            os.remove(ssh_pkey)
+                        except:
+                            pass
+                    
                     await self._log_connection(partner.id, ConnectionStatus.SSH_FAILED, str(e), response_time)
                     return TestConnectionResponse(
                         success=False,
                         message=f"SSH connection failed: {str(e)}",
                         responseTimeMs=response_time
                     )
-            
-            # Test MySQL connection
-            try:
-                if ssh_client and partner.sshConfig.enabled:
-                    # Create SSH tunnel
-                    tunnel = ssh_client.get_transport().open_channel(
-                        'direct-tcpip',
-                        (partner.dbHost, partner.dbPort),
-                        ('127.0.0.1', 0)
-                    )
-                    mysql_conn = pymysql.connect(
-                        host='127.0.0.1',
-                        port=partner.dbPort,
-                        user=partner.dbUsername,
-                        password=db_password,
-                        database=partner.dbName,
-                        connect_timeout=30,
-                        sock=tunnel
-                    )
-                else:
-                    # Direct connection
+            else:
+                # Direct connection without SSH
+                try:
                     mysql_conn = pymysql.connect(
                         host=partner.dbHost,
                         port=partner.dbPort,
@@ -99,25 +133,41 @@ class SSHConnectionService:
                         database=partner.dbName,
                         connect_timeout=30
                     )
-                
-                # Test query
-                cursor = mysql_conn.cursor()
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-                cursor.close()
-                
-                response_time = int((time.time() - start_time) * 1000)
-                await self._log_connection(partner.id, ConnectionStatus.SUCCESS, None, response_time)
-                
-                return TestConnectionResponse(
-                    success=True,
-                    message="Connection successful",
-                    responseTimeMs=response_time,
-                    details={"database": partner.dbName}
-                )
-                
-            except Exception as e:
-                response_time = int((time.time() - start_time) * 1000)
+                    
+                    # Test query
+                    cursor = mysql_conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                    cursor.close()
+                    mysql_conn.close()
+                    
+                    response_time = int((time.time() - start_time) * 1000)
+                    await self._log_connection(partner.id, ConnectionStatus.SUCCESS, None, response_time)
+                    
+                    return TestConnectionResponse(
+                        success=True,
+                        message="Connection successful (direct)",
+                        responseTimeMs=response_time,
+                        details={"database": partner.dbName, "via_ssh": False}
+                    )
+                    
+                except Exception as e:
+                    response_time = int((time.time() - start_time) * 1000)
+                    await self._log_connection(partner.id, ConnectionStatus.DB_FAILED, str(e), response_time)
+                    return TestConnectionResponse(
+                        success=False,
+                        message=f"Database connection failed: {str(e)}",
+                        responseTimeMs=response_time
+                    )
+        
+        except Exception as e:
+            response_time = int((time.time() - start_time) * 1000)
+            logger.error(f"Unexpected error in test_connection: {str(e)}")
+            return TestConnectionResponse(
+                success=False,
+                message=f"Connection test failed: {str(e)}",
+                responseTimeMs=response_time
+            )
                 await self._log_connection(partner.id, ConnectionStatus.DB_FAILED, str(e), response_time)
                 return TestConnectionResponse(
                     success=False,

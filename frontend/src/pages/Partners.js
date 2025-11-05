@@ -18,6 +18,8 @@ function Partners() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(null);
   const [formData, setFormData] = useState({
     partnerName: '',
     tenantId: '',

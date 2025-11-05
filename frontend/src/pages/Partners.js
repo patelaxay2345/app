@@ -57,8 +57,8 @@ function Partners() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate SSH configuration if enabled
-    if (formData.sshConfig.enabled) {
+    // Validate SSH configuration if enabled (only for new partners)
+    if (formData.sshConfig.enabled && !editingPartner) {
       const hasPassword = formData.sshConfig.password && formData.sshConfig.password.trim() !== '';
       const hasPrivateKey = formData.sshConfig.privateKey && formData.sshConfig.privateKey.trim() !== '';
       

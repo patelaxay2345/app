@@ -211,7 +211,7 @@ function Dashboard() {
         </div>
 
         {/* Overview Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Activity className="w-10 h-10 text-blue-400" />
@@ -250,6 +250,26 @@ function Dashboard() {
               </span>
             </div>
             <p className="text-gray-400">Queued Calls</p>
+          </div>
+
+          <div className="glass rounded-xl p-6 border border-white/10 card-hover">
+            <div className="flex items-center justify-between mb-4">
+              <Check className="w-10 h-10 text-emerald-400" />
+              <span className="text-4xl font-bold text-white" data-testid="completed-calls-today">
+                {overview?.completedCallsToday || 0}
+              </span>
+            </div>
+            <p className="text-gray-400">Completed Calls Today</p>
+          </div>
+
+          <div className="glass rounded-xl p-6 border border-white/10 card-hover">
+            <div className="flex items-center justify-between mb-4">
+              <Clock className="w-10 h-10 text-yellow-400" />
+              <span className="text-4xl font-bold text-white" data-testid="remaining-calls">
+                {overview?.remainingCalls || 0}
+              </span>
+            </div>
+            <p className="text-gray-400">Remaining Calls</p>
           </div>
 
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">

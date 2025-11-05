@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import Layout from '../components/Layout';
 import { API } from '../App';
-import { ArrowLeft, RefreshCw, Edit } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Edit, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Progress } from '../components/ui/progress';

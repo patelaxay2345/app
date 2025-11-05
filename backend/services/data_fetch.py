@@ -186,10 +186,10 @@ class DataFetchService:
             result = await self.ssh_service.execute_query(
                 partner,
                 """
-                SELECT COUNT(DISTINCT cc.contactid) as count 
-                FROM campaigncontacts cc
-                INNER JOIN campaigns c ON cc.campaignid = c.id
-                LEFT JOIN calls ca ON cc.contactid = ca.contactid AND cc.campaignid = ca.campaignid
+                SELECT COUNT(DISTINCT cc.B) as count 
+                FROM _campaigntocontact cc
+                INNER JOIN campaigns c ON cc.A = c.id
+                LEFT JOIN calls ca ON cc.B = ca.contactid AND cc.A = ca.campaignid
                 WHERE c.status = 'RUNNING' 
                 AND c.deleted = 0
                 AND (ca.status IS NULL OR ca.status IN ('QUEUED', 'INPROGRESS'))

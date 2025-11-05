@@ -162,10 +162,15 @@ function Partners() {
       dbPort: partner.dbPort,
       dbName: partner.dbName,
       dbUsername: partner.dbUsername,
-      dbPassword: '',
+      dbPassword: '', // Don't show encrypted password
       concurrencyLimit: partner.concurrencyLimit,
       isActive: partner.isActive,
-      sshConfig: partner.sshConfig,
+      sshConfig: {
+        ...partner.sshConfig,
+        password: '', // Don't show encrypted password
+        privateKey: '', // Don't show encrypted key
+        passphrase: '', // Don't show encrypted passphrase
+      },
     });
     setDialogOpen(true);
   };

@@ -216,8 +216,7 @@ test_plan:
   current_focus:
     - "Handle SSH key update without double encryption"
     - "Add backend SSH validation"
-  stuck_tasks:
-    - "Handle SSH key update without double encryption"
+  stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 

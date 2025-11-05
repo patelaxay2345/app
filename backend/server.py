@@ -200,6 +200,8 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
         update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
     
     if 'sshConfig' in update_dict:
+        if update_dict['sshConfig'].get('password'):
+            update_dict['sshConfig']['password'] = encryption_service.encrypt(update_dict['sshConfig']['password'])
         if update_dict['sshConfig'].get('privateKey'):
             update_dict['sshConfig']['privateKey'] = encryption_service.encrypt(update_dict['sshConfig']['privateKey'])
         if update_dict['sshConfig'].get('passphrase'):

@@ -329,14 +329,61 @@ function Dashboard() {
                         {snapshot?.queuedCalls || 0}
                       </td>
                       <td className="px-6 py-4" data-testid="utilization-cell">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-white">
-                              {snapshot?.activeCalls || 0}/{partner.partner.concurrencyLimit}
-                            </span>
-                            <span className="text-gray-400">{utilization.toFixed(1)}%</span>
-                          </div>
-                          <Progress value={utilization} className="h-2" />
+                        <div className="space-y-2">
+                          {editingConcurrency === partner.partner.id ? (
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={newConcurrencyValue}
+                                onChange={(e) => setNewConcurrencyValue(e.target.value)}
+                                className="w-20 bg-black/40 border border-white/10 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500"
+                                placeholder={partner.partner.concurrencyLimit}
+                                autoFocus
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleUpdateConcurrency(partner.partner.id, partner.partner.partnerName)}
+                                className="bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 p-1 h-7 w-7"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setEditingConcurrency(null);
+                                  setNewConcurrencyValue('');
+                                }}
+                                className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 p-1 h-7 w-7"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                  <span className="text-white">
+                                    {snapshot?.activeCalls || 0}/{partner.partner.concurrencyLimit}
+                                  </span>
+                                  <span className="text-gray-400">{utilization.toFixed(1)}%</span>
+                                </div>
+                                <Progress value={utilization} className="h-2" />
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setEditingConcurrency(partner.partner.id);
+                                  setNewConcurrencyValue(partner.partner.concurrencyLimit);
+                                }}
+                                className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 p-1 h-7 w-7"
+                                title="Edit concurrency limit"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">

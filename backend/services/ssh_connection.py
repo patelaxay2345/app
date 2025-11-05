@@ -168,28 +168,6 @@ class SSHConnectionService:
                 message=f"Connection test failed: {str(e)}",
                 responseTimeMs=response_time
             )
-                await self._log_connection(partner.id, ConnectionStatus.DB_FAILED, str(e), response_time)
-                return TestConnectionResponse(
-                    success=False,
-                    message=f"Database connection failed: {str(e)}",
-                    responseTimeMs=response_time
-                )
-            finally:
-                if mysql_conn:
-                    mysql_conn.close()
-                if tunnel:
-                    tunnel.close()
-                if ssh_client:
-                    ssh_client.close()
-        
-        except Exception as e:
-            response_time = int((time.time() - start_time) * 1000)
-            logger.error(f"Connection test error for {partner.partnerName}: {str(e)}")
-            return TestConnectionResponse(
-                success=False,
-                message=f"Connection error: {str(e)}",
-                responseTimeMs=response_time
-            )
     
     async def execute_query(self, partner: PartnerConfig, query: str, params: tuple = None):
         """Execute SQL query on partner database through SSH tunnel"""

@@ -108,17 +108,26 @@ function Dashboard() {
 
     setUpdatingConcurrency(partnerId);
     try {
-      await axios.post(`${API}/partners/${partnerId}/concurrency`, {
+      const response = await axios.post(`${API}/partners/${partnerId}/concurrency`, {
         newLimit: parseInt(newConcurrencyValue),
         reason: 'Updated from dashboard'
       });
       
-      toast.success(`Concurrency updated for ${partnerName}`);
+      // Show appropriate message based on sync status
+      if (response.data.syncedToPartner) {
+        toast.success(`Concurrency updated for ${partnerName} and synced to partner database`);
+      } else {
+        toast.success(`Concurrency updated for ${partnerName} (admin only)`);
+        if (response.data.syncMessage) {
+          toast.warning(`Partner DB sync: ${response.data.syncMessage}`);
+        }
+      }
+      
       setEditingConcurrency(null);
       setNewConcurrencyValue('');
       fetchDashboardData();
     } catch (error) {
-      toast.error('Failed to update concurrency');
+      toast.error(error.response?.data?.message || 'Failed to update concurrency');
     } finally {
       setUpdatingConcurrency(null);
     }

@@ -86,19 +86,19 @@ class ConcurrencyService:
                 FROM settings WHERE name = 'callConcurrency'
             """
             
-            # Execute queries via SSH tunnel
-            result = await self.ssh_service.execute_query(partner, update_query, (new_limit,))
-            if result is not None:
+            # Execute update query via SSH tunnel
+            affected_rows = await self.ssh_service.execute_update(partner, update_query, (new_limit,))
+            if affected_rows > 0:
                 # Insert audit log
-                audit_result = await self.ssh_service.execute_query(partner, audit_query, (new_limit,))
-                if audit_result is not None:
+                audit_affected = await self.ssh_service.execute_update(partner, audit_query, (new_limit,))
+                if audit_affected > 0:
                     logger.info(f"Successfully synced concurrency {new_limit} to partner {partner.partnerName} with audit log")
                     return {"success": True, "message": "Synced to partner database with audit log"}
                 else:
                     logger.warning(f"Concurrency updated but audit log failed for partner {partner.partnerName}")
                     return {"success": True, "message": "Synced to partner database (audit log warning)"}
             else:
-                return {"success": False, "error": "Query execution failed"}
+                return {"success": False, "error": "No rows updated - callConcurrency setting might not exist"}
         
         except Exception as e:
             logger.error(f"Error syncing to partner database: {str(e)}")

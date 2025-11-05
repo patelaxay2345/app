@@ -131,9 +131,7 @@ function Dashboard() {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-96">
-          <div className="animate-pulse text-blue-400">Loading dashboard...</div>
-        </div>
+        <DashboardSkeleton />
       </Layout>
     );
   }

@@ -46,12 +46,17 @@ function PartnerDetail() {
   };
 
   const handleForceSync = async () => {
+    setSyncing(true);
     try {
       await axios.post(`${API}/partners/${partnerId}/force-sync`);
       toast.success('Sync initiated');
-      setTimeout(() => fetchPartnerDetails(), 2000);
+      setTimeout(() => {
+        fetchPartnerDetails();
+        setSyncing(false);
+      }, 2000);
     } catch (error) {
       toast.error('Failed to initiate sync');
+      setSyncing(false);
     }
   };
 

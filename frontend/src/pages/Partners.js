@@ -11,6 +11,7 @@ import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { Textarea } from '../components/ui/textarea';
 import { useNavigate } from 'react-router-dom';
+import { PartnersSkeleton } from '../components/ui/skeleton';
 
 function Partners() {
   const navigate = useNavigate();

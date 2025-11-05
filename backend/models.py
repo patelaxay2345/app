@@ -122,6 +122,8 @@ class DashboardSnapshot(BaseModel):
     runningCampaigns: int = 0
     activeCalls: int = 0
     queuedCalls: int = 0
+    completedCallsToday: int = 0
+    remainingCalls: int = 0
     concurrencyLimit: int = 10
     utilizationPercent: float = 0.0
     alertLevel: AlertLevel = AlertLevel.NORMAL

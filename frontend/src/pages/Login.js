@@ -86,10 +86,6 @@ function Login() {
               {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-gray-400">
-            Default credentials: admin / Admin@2024
-          </div>
         </div>
       </div>
     </div>

@@ -8,12 +8,18 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Save } from 'lucide-react';
+import { Save, Lock, Loader2 } from 'lucide-react';
 
 function Settings() {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   useEffect(() => {
     fetchSettings();

@@ -240,6 +240,26 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* Overview Partner Filter */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-semibold text-white">Performance Metrics</h3>
+          <div className="flex items-center space-x-2">
+            <label className="text-sm text-gray-400">Show stats for:</label>
+            <select
+              value={selectedOverviewPartner}
+              onChange={(e) => setSelectedOverviewPartner(e.target.value)}
+              className="bg-black/40 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">All Partners</option>
+              {partners.map((p) => (
+                <option key={p.partner.id} value={p.partner.id}>
+                  {p.partner.partnerName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Overview Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">

@@ -146,6 +146,34 @@ async def get_me(current_user: User = Depends(get_current_user)):
 async def logout(current_user: User = Depends(get_current_user)):
     return {"message": "Logged out successfully"}
 
+@api_router.post("/auth/change-password")
+async def change_password(
+    password_change: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Change user password"""
+    current_password = password_change.get('currentPassword')
+    new_password = password_change.get('newPassword')
+    
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="Current and new password required")
+    
+    # Verify current password
+    user = await db.users.find_one({"id": current_user.id}, {"_id": 0})
+    if not user or not bcrypt.checkpw(current_password.encode('utf-8'), user['password'].encode('utf-8')):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Hash new password
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    # Update password
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {"password": hashed_password, "updatedAt": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"message": "Password changed successfully"}
+
 # ============= Partner Management Routes =============
 @api_router.get("/partners", response_model=List[PartnerConfig])
 async def get_partners(current_user: User = Depends(get_current_user)):

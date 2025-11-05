@@ -336,7 +336,24 @@ function Partners() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-gray-300">SSH Private Key (paste here)</Label>
+                      <Label className="text-gray-300">
+                        SSH Password {editingPartner && '(leave blank to keep current)'}
+                      </Label>
+                      <Input
+                        type="password"
+                        value={formData.sshConfig.password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sshConfig: { ...formData.sshConfig, password: e.target.value } })
+                        }
+                        className="bg-black/40 border-white/10 text-white"
+                        placeholder={editingPartner ? "Enter new password to update" : "Enter SSH password"}
+                      />
+                      <p className="text-xs text-gray-400">Primary authentication method</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">
+                        SSH Private Key (optional) {editingPartner && '(leave blank to keep current)'}
+                      </Label>
                       <Textarea
                         value={formData.sshConfig.privateKey}
                         onChange={(e) =>
@@ -344,7 +361,22 @@ function Partners() {
                         }
                         rows={4}
                         className="bg-black/40 border-white/10 text-white font-mono text-xs"
-                        placeholder="-----BEGIN RSA PRIVATE KEY-----"
+                        placeholder={editingPartner ? "Enter new private key to update" : "-----BEGIN RSA PRIVATE KEY-----"}
+                      />
+                      <p className="text-xs text-gray-400">Alternative to password authentication</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-gray-300">
+                        SSH Passphrase (if key is encrypted) {editingPartner && '(leave blank to keep current)'}
+                      </Label>
+                      <Input
+                        type="password"
+                        value={formData.sshConfig.passphrase}
+                        onChange={(e) =>
+                          setFormData({ ...formData, sshConfig: { ...formData.sshConfig, passphrase: e.target.value } })
+                        }
+                        className="bg-black/40 border-white/10 text-white"
+                        placeholder={editingPartner ? "Enter new passphrase to update" : "Enter passphrase if key is encrypted"}
                       />
                     </div>
                   </div>

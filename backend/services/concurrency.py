@@ -72,28 +72,37 @@ class ConcurrencyService:
     async def _sync_to_partner_db(self, partner: PartnerConfig, new_limit: int) -> dict:
         """Sync concurrency setting to partner's MySQL database"""
         try:
-            # For mock implementation, just return success
-            # In production, this would execute:
-            # INSERT INTO settings (name, value, tenantId, createdAt, updatedAt)
-            # VALUES ('CALL_CONCURRENCY', new_limit, partner.tenantId, NOW(), NOW())
-            # ON DUPLICATE KEY UPDATE value = VALUES(value), updatedAt = NOW()
-            
-            query = """
-                INSERT INTO settings (name, value, tenantId, createdAt, updatedAt)
-                VALUES ('CALL_CONCURRENCY', %s, %s, NOW(), NOW())
-                ON DUPLICATE KEY UPDATE value = VALUES(value), updatedAt = NOW()
+            # Update settings table
+            update_query = """
+                UPDATE settings 
+                SET value = %s 
+                WHERE name = 'callConcurrency'
             """
             
-            # Uncomment when real partner databases are available
-            # result = await self.ssh_service.execute_query(partner, query, (new_limit, partner.tenantId))
-            # if result is not None:
-            #     return {"success": True, "message": "Synced to partner database"}
-            # else:
-            #     return {"success": False, "error": "Query execution failed"}
+            # Insert audit log entry
+            audit_query = """
+                INSERT INTO settings_auditlogs (userid, name, oldvalue, newvalue, createdat)
+                SELECT 9999999999, 'callConcurrency', value, %s, NOW()
+                FROM settings WHERE name = 'callConcurrency'
+            """
             
-            # Mock response for development
-            logger.info(f"Mock: Would sync concurrency {new_limit} to partner {partner.partnerName}")
-            return {"success": True, "message": "Mock sync successful (no real partner DB)"}
+            # Execute queries via SSH tunnel
+            result = await self.ssh_service.execute_query(partner, update_query, (new_limit,))
+            if result is not None:
+                # Insert audit log
+                audit_result = await self.ssh_service.execute_query(partner, audit_query, (new_limit,))
+                if audit_result is not None:
+                    logger.info(f"Successfully synced concurrency {new_limit} to partner {partner.partnerName} with audit log")
+                    return {"success": True, "message": "Synced to partner database with audit log"}
+                else:
+                    logger.warning(f"Concurrency updated but audit log failed for partner {partner.partnerName}")
+                    return {"success": True, "message": "Synced to partner database (audit log warning)"}
+            else:
+                return {"success": False, "error": "Query execution failed"}
+        
+        except Exception as e:
+            logger.error(f"Error syncing to partner database: {str(e)}")
+            return {"success": False, "error": str(e)}
         
         except Exception as e:
             logger.error(f"Error syncing to partner database: {str(e)}")

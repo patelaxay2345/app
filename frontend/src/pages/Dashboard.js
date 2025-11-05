@@ -27,6 +27,9 @@ function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [selectedPartner, setSelectedPartner] = useState('all');
+  const [editingConcurrency, setEditingConcurrency] = useState(null);
+  const [newConcurrencyValue, setNewConcurrencyValue] = useState('');
 
   const fetchDashboardData = async (manual = false) => {
     try {

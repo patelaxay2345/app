@@ -186,6 +186,9 @@ function Partners() {
 
   return (
     <Layout>
+      {loading ? (
+        <PartnersSkeleton />
+      ) : (
       <div className="space-y-6" data-testid="partners-page">
         <div className="flex items-center justify-between">
           <h2 className="text-3xl font-bold text-white">Partners Management</h2>

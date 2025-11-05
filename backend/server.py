@@ -159,6 +159,17 @@ async def create_partner(partner_input: PartnerConfigCreate, current_user: User 
     if existing:
         raise HTTPException(status_code=400, detail="Partner name already exists")
     
+    # Validate SSH configuration if enabled
+    if partner_input.sshConfig.enabled:
+        has_password = partner_input.sshConfig.password and partner_input.sshConfig.password.strip() != ''
+        has_private_key = partner_input.sshConfig.privateKey and partner_input.sshConfig.privateKey.strip() != ''
+        
+        if not has_password and not has_private_key:
+            raise HTTPException(
+                status_code=400, 
+                detail="SSH is enabled but no authentication method provided. Please provide either SSH password or SSH private key."
+            )
+    
     # Create partner
     partner = PartnerConfig(**partner_input.model_dump())
     

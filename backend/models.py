@@ -188,6 +188,8 @@ class DashboardOverview(BaseModel):
     runningCampaigns: int
     activeCalls: int
     queuedCalls: int
+    completedCallsToday: int
+    remainingCalls: int
     totalPartners: int
     activePartners: int
     avgUtilization: float

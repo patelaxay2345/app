@@ -266,7 +266,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Activity className="w-10 h-10 text-blue-400" />
               <span className="text-4xl font-bold text-white" data-testid="campaigns-today">
-                {overview?.campaignsToday || 0}
+                {displayOverview?.campaignsToday || 0}
               </span>
             </div>
             <p className="text-gray-400">Campaigns Created Today</p>
@@ -276,7 +276,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <TrendingUp className="w-10 h-10 text-green-400" />
               <span className="text-4xl font-bold text-white" data-testid="running-campaigns">
-                {overview?.runningCampaigns || 0}
+                {displayOverview?.runningCampaigns || 0}
               </span>
             </div>
             <p className="text-gray-400">Running Campaigns</p>
@@ -286,7 +286,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Phone className="w-10 h-10 text-purple-400" />
               <span className="text-4xl font-bold text-white" data-testid="active-calls">
-                {overview?.activeCalls || 0}
+                {displayOverview?.activeCalls || 0}
               </span>
             </div>
             <p className="text-gray-400">Active Calls</p>
@@ -296,7 +296,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <PhoneIncoming className="w-10 h-10 text-orange-400" />
               <span className="text-4xl font-bold text-white" data-testid="queued-calls">
-                {overview?.queuedCalls || 0}
+                {displayOverview?.queuedCalls || 0}
               </span>
             </div>
             <p className="text-gray-400">Queued Calls</p>
@@ -306,7 +306,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Check className="w-10 h-10 text-emerald-400" />
               <span className="text-4xl font-bold text-white" data-testid="completed-calls-today">
-                {overview?.completedCallsToday || 0}
+                {displayOverview?.completedCallsToday || 0}
               </span>
             </div>
             <p className="text-gray-400">Completed Calls Today</p>
@@ -316,7 +316,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Clock className="w-10 h-10 text-yellow-400" />
               <span className="text-4xl font-bold text-white" data-testid="remaining-calls">
-                {overview?.remainingCalls || 0}
+                {displayOverview?.remainingCalls || 0}
               </span>
             </div>
             <p className="text-gray-400">Remaining Calls</p>
@@ -326,7 +326,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Users className="w-10 h-10 text-pink-400" />
               <span className="text-4xl font-bold text-white" data-testid="total-partners">
-                {overview?.activePartners}/{overview?.totalPartners || 0}
+                {displayOverview?.activePartners}/{displayOverview?.totalPartners || 0}
               </span>
             </div>
             <p className="text-gray-400">Active / Total Partners</p>
@@ -336,7 +336,7 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <Activity className="w-10 h-10 text-cyan-400" />
               <span className="text-4xl font-bold text-white" data-testid="avg-utilization">
-                {overview?.avgUtilization?.toFixed(1) || 0}%
+                {displayOverview?.avgUtilization?.toFixed(1) || 0}%
               </span>
             </div>
             <p className="text-gray-400">Avg Concurrency Utilization</p>

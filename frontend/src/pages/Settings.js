@@ -121,6 +121,70 @@ function Settings() {
           </Button>
         </div>
 
+        {/* Change Password Section */}
+        <div className="glass rounded-xl border border-white/10 p-6">
+          <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+            <Lock className="w-5 h-5 mr-2" />
+            Change Password
+          </h3>
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+            <div className="space-y-2">
+              <Label className="text-gray-300">Current Password</Label>
+              <Input
+                type="password"
+                value={passwordData.currentPassword}
+                onChange={(e) => setPasswordData({...passwordData, currentPassword: e.target.value})}
+                required
+                className="bg-black/40 border-white/10 text-white"
+                placeholder="Enter current password"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">New Password</Label>
+              <Input
+                type="password"
+                value={passwordData.newPassword}
+                onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+                required
+                minLength={8}
+                className="bg-black/40 border-white/10 text-white"
+                placeholder="Enter new password (min 8 characters)"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">Confirm New Password</Label>
+              <Input
+                type="password"
+                value={passwordData.confirmPassword}
+                onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+                required
+                className="bg-black/40 border-white/10 text-white"
+                placeholder="Confirm new password"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              disabled={changingPassword}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 text-white"
+            >
+              {changingPassword ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Changing Password...
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4 mr-2" />
+                  Change Password
+                </>
+              )}
+            </Button>
+          </form>
+        </div>
+
         {/* Dashboard Refresh Settings */}
         <div className="glass rounded-xl border border-white/10 p-6">
           <h3 className="text-xl font-semibold text-white mb-6">Dashboard Refresh Configuration</h3>

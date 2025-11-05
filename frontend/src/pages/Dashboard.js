@@ -347,13 +347,19 @@ function Dashboard() {
                                 className="w-20 bg-black/40 border border-white/10 text-white rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500"
                                 placeholder={partner.partner.concurrencyLimit}
                                 autoFocus
+                                disabled={updatingConcurrency === partner.partner.id}
                               />
                               <Button
                                 size="sm"
                                 onClick={() => handleUpdateConcurrency(partner.partner.id, partner.partner.partnerName)}
+                                disabled={updatingConcurrency === partner.partner.id}
                                 className="bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 p-1 h-7 w-7"
                               >
-                                <Check className="w-4 h-4" />
+                                {updatingConcurrency === partner.partner.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -361,6 +367,7 @@ function Dashboard() {
                                   setEditingConcurrency(null);
                                   setNewConcurrencyValue('');
                                 }}
+                                disabled={updatingConcurrency === partner.partner.id}
                                 className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 p-1 h-7 w-7"
                               >
                                 <X className="w-4 h-4" />

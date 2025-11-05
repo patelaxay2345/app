@@ -413,10 +413,10 @@ function Dashboard() {
             </table>
           </div>
 
-          {partners.length === 0 && (
+          {filteredPartners.length === 0 && (
             <div className="p-12 text-center text-gray-400" data-testid="no-partners">
               <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p>No partners configured yet</p>
+              <p>{selectedPartner === 'all' ? 'No partners configured yet' : 'No data available for selected partner'}</p>
             </div>
           )}
         </div>

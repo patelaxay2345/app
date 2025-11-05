@@ -204,10 +204,15 @@ function PartnerDetail() {
                 <Button
                   size="sm"
                   onClick={handleClearLogs}
+                  disabled={clearingLogs}
                   className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Clear Logs
+                  {clearingLogs ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  {clearingLogs ? 'Clearing...' : 'Clear Logs'}
                 </Button>
               </div>
               <div className="overflow-x-auto">

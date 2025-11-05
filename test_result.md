@@ -227,3 +227,39 @@ agent_communication:
       8. Test connection with key authentication
       
       Please test all scenarios thoroughly, especially the edit flow and credential updates.
+  
+  - agent: "testing"
+    message: |
+      **BACKEND TESTING COMPLETED - CRITICAL ISSUES FOUND**
+      
+      **✅ WORKING CORRECTLY:**
+      - SSH password encryption in database ✅
+      - SSH private key encryption in database ✅
+      - SSH passphrase encryption in database ✅
+      - Partner creation with SSH password only ✅
+      - Partner creation with SSH private key only ✅
+      - No double encryption during basic updates ✅
+      - All existing SSH credentials properly encrypted in database ✅
+      
+      **❌ CRITICAL ISSUES IDENTIFIED:**
+      
+      1. **BACKEND VALIDATION MISSING** (High Priority)
+         - Backend allows creation of partners with SSH enabled but no credentials
+         - Frontend has validation, but backend bypasses it
+         - Security risk: Invalid SSH configs can be stored
+         - Location: /app/backend/server.py create_partner endpoint (line 156)
+      
+      2. **SSH UPDATE BUG** (High Priority)
+         - When updating SSH config partially, missing fields are set to None/null
+         - Original encrypted privateKey and passphrase are lost during password-only updates
+         - This breaks the "update only password, keep key intact" requirement
+         - Location: /app/backend/server.py update_partner endpoint (line 191)
+         - Root cause: sshConfig object replacement instead of field-level merging
+      
+      **IMPACT:**
+      - Partners can be created with invalid SSH configurations
+      - Existing SSH credentials are lost during partial updates
+      - Users cannot safely update just SSH password without losing private key
+      
+      **RECOMMENDATION:**
+      Main agent must fix these backend validation and update logic issues before deployment.

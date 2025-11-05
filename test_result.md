@@ -289,3 +289,43 @@ agent_communication:
       
       **RECOMMENDATION:**
       Main agent must fix these backend validation and update logic issues before deployment.
+  
+  - agent: "testing"
+    message: |
+      **SSH AUTHENTICATION FIXES RETESTING COMPLETED - ALL ISSUES RESOLVED** ✅
+      
+      **COMPREHENSIVE TESTING RESULTS:**
+      
+      **✅ BACKEND VALIDATION FIXED:**
+      - Backend now properly validates SSH authentication methods
+      - Returns 400 error with clear message when SSH enabled but no credentials provided
+      - Error message: "SSH is enabled but no authentication method provided. Please provide either SSH password or SSH private key."
+      - Security vulnerability closed ✅
+      
+      **✅ SSH CONFIG MERGE FUNCTIONALITY WORKING:**
+      - Update password only: privateKey and passphrase preserved ✅
+      - Update privateKey only: password preserved ✅  
+      - Update other fields only: all SSH credentials unchanged ✅
+      - No double encryption across multiple updates ✅
+      - Proper field-level merging instead of object replacement ✅
+      
+      **✅ ENCRYPTION VERIFICATION:**
+      - All SSH passwords encrypted in database ✅
+      - All SSH private keys encrypted in database ✅
+      - All SSH passphrases encrypted in database ✅
+      - No plaintext credentials found in database ✅
+      
+      **TEST SCENARIOS COMPLETED:**
+      1. Backend validation test - SSH enabled but no auth method ✅
+      2. SSH config merge - update password only ✅
+      3. SSH config merge - update key only ✅
+      4. SSH config merge - no credential changes ✅
+      5. Verify no double encryption ✅
+      
+      **IMPACT:**
+      - All previously identified critical bugs are now fixed
+      - SSH authentication system is secure and functional
+      - Partner configuration updates work correctly without data loss
+      - Backend validation prevents invalid SSH configurations
+      
+      **STATUS:** All SSH authentication fixes verified and working correctly. Ready for production use.

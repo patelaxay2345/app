@@ -109,12 +109,15 @@ function Partners() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this partner?')) return;
 
+    setDeleting(id);
     try {
       await axios.delete(`${API}/partners/${id}`);
       toast.success('Partner deleted successfully');
       fetchPartners();
     } catch (error) {
       toast.error('Failed to delete partner');
+    } finally {
+      setDeleting(null);
     }
   };
 

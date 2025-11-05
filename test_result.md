@@ -147,11 +147,11 @@ backend:
   
   - task: "Add backend SSH validation"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
@@ -159,6 +159,9 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "ADDED: Backend validation in create_partner endpoint. Now checks that at least one of SSH password or privateKey is provided when SSH is enabled. Returns 400 error with clear message if neither is provided."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Backend SSH validation working correctly. When SSH is enabled but no password or privateKey provided, backend returns 400 error with clear message: 'SSH is enabled but no authentication method provided. Please provide either SSH password or SSH private key.' This prevents invalid SSH configurations from being stored."
 
 frontend:
   - task: "Add SSH password field to partner form"

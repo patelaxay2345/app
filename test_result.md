@@ -126,11 +126,11 @@ backend:
   
   - task: "Handle SSH key update without double encryption"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 1
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
@@ -141,6 +141,9 @@ backend:
       - working: "NA"
         agent: "main"
         comment: "FIXED: Modified update_partner endpoint to merge SSH config fields instead of replacing entire object. Now existing encrypted credentials are preserved when updating only specific SSH fields. Only non-empty values are updated."
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: SSH config merge functionality working perfectly. Tested all scenarios: 1) Update password only - privateKey preserved ✅ 2) Update key only - password preserved ✅ 3) No credential changes - all SSH fields unchanged ✅ 4) No double encryption across multiple updates ✅. All existing encrypted credentials are properly preserved during partial updates."
   
   - task: "Add backend SSH validation"
     implemented: true

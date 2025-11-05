@@ -104,6 +104,7 @@ function Dashboard() {
       return;
     }
 
+    setUpdatingConcurrency(partnerId);
     try {
       await axios.post(`${API}/partners/${partnerId}/concurrency`, {
         newLimit: parseInt(newConcurrencyValue),
@@ -116,6 +117,8 @@ function Dashboard() {
       fetchDashboardData();
     } catch (error) {
       toast.error('Failed to update concurrency');
+    } finally {
+      setUpdatingConcurrency(null);
     }
   };
 

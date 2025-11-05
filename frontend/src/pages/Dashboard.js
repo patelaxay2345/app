@@ -34,6 +34,7 @@ function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selectedPartner, setSelectedPartner] = useState('all');
+  const [selectedOverviewPartner, setSelectedOverviewPartner] = useState('all');
   const [editingConcurrency, setEditingConcurrency] = useState(null);
   const [newConcurrencyValue, setNewConcurrencyValue] = useState('');
   const [updatingConcurrency, setUpdatingConcurrency] = useState(null);

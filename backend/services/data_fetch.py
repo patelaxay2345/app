@@ -99,6 +99,8 @@ class DataFetchService:
                     runningCampaigns=metrics['runningCampaigns'],
                     activeCalls=metrics['activeCalls'],
                     queuedCalls=metrics['queuedCalls'],
+                    completedCallsToday=metrics.get('completedCallsToday', 0),
+                    remainingCalls=metrics.get('remainingCalls', 0),
                     concurrencyLimit=partner.concurrencyLimit,
                     utilizationPercent=round(utilization, 2),
                     alertLevel=alert_level,

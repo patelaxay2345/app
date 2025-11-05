@@ -22,6 +22,7 @@ import { Input } from '../components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { Progress } from '../components/ui/progress';
+import { DashboardSkeleton } from '../components/ui/skeleton';
 
 function Dashboard() {
   const navigate = useNavigate();

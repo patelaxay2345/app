@@ -33,6 +33,7 @@ function Partners() {
       host: '',
       port: 22,
       username: '',
+      password: '',
       privateKey: '',
       passphrase: '',
     },

@@ -261,6 +261,12 @@ async def get_partner_logs(partner_id: str, limit: int = 50, current_user: User 
     logs = await db.connection_logs.find({"partnerId": partner_id}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
     return logs
 
+@api_router.delete("/partners/{partner_id}/logs")
+async def clear_partner_logs(partner_id: str, current_user: User = Depends(get_current_user)):
+    """Clear all connection logs for a partner"""
+    result = await db.connection_logs.delete_many({"partnerId": partner_id})
+    return {"message": f"Deleted {result.deleted_count} connection logs"}
+
 @api_router.get("/partners/{partner_id}/history", response_model=List[ConcurrencyHistory])
 async def get_concurrency_history(partner_id: str, limit: int = 20, current_user: User = Depends(get_current_user)):
     history = await db.concurrency_history.find({"partnerId": partner_id}, {"_id": 0}).sort("changedAt", -1).limit(limit).to_list(limit)

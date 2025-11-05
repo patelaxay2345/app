@@ -173,7 +173,29 @@ class DataFetchService:
             )
             queued_calls = result[0]['count'] if result and len(result) > 0 else 0
             
-            # Query 5: Sync concurrency from settings table
+            # Query 5: Completed calls today (COMPLETED status)
+            result = await self.ssh_service.execute_query(
+                partner,
+                "SELECT COUNT(*) as count FROM calls WHERE status = 'COMPLETED' AND DATE(updatedAt) = CURDATE()"
+            )
+            completed_calls_today = result[0]['count'] if result and len(result) > 0 else 0
+            
+            # Query 6: Remaining calls (total contacts in running campaigns minus completed/failed calls)
+            result = await self.ssh_service.execute_query(
+                partner,
+                """
+                SELECT COUNT(DISTINCT cc.contactid) as count 
+                FROM campaigncontacts cc
+                INNER JOIN campaigns c ON cc.campaignid = c.id
+                LEFT JOIN calls ca ON cc.contactid = ca.contactid AND cc.campaignid = ca.campaignid
+                WHERE c.status = 'RUNNING' 
+                AND c.deleted = 0
+                AND (ca.status IS NULL OR ca.status IN ('QUEUED', 'INPROGRESS'))
+                """
+            )
+            remaining_calls = result[0]['count'] if result and len(result) > 0 else 0
+            
+            # Query 7: Sync concurrency from settings table
             try:
                 result = await self.ssh_service.execute_query(
                     partner,

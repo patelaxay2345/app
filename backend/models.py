@@ -157,7 +157,7 @@ class AlertLog(BaseModel):
     resolvedAt: Optional[datetime] = None
     emailSent: bool = False
     lastEmailSentAt: Optional[datetime] = None
-    createdAt: datetime = Field(default_factory=datetime.utcnow)
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Concurrency History Models
 class ConcurrencyHistory(BaseModel):

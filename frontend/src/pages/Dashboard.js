@@ -505,16 +505,25 @@ function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Switch
-                          checked={partner.partner.pauseNonPriorityCampaigns || false}
-                          onCheckedChange={() => handleTogglePauseNonPriority(
-                            partner.partner.id,
-                            partner.partner.partnerName,
-                            partner.partner.pauseNonPriorityCampaigns
-                          )}
-                          disabled={togglingPause === partner.partner.id}
-                          className="data-[state=checked]:bg-green-500"
-                        />
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            checked={partner.partner.pauseNonPriorityCampaigns || false}
+                            onCheckedChange={() => handleTogglePauseNonPriority(
+                              partner.partner.id,
+                              partner.partner.partnerName,
+                              partner.partner.pauseNonPriorityCampaigns
+                            )}
+                            disabled={togglingPause === partner.partner.id}
+                            className="data-[state=checked]:bg-green-500"
+                          />
+                          <span className="text-xs text-gray-400">
+                            {togglingPause === partner.partner.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              partner.partner.pauseNonPriorityCampaigns ? 'Enabled' : 'Disabled'
+                            )}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span

@@ -556,7 +556,24 @@ async def get_partner_metrics(partner_id: str, current_user: User = Depends(get_
         sort=[("snapshotTime", -1)]
     )
     if not snapshot:
-        raise HTTPException(status_code=404, detail="No metrics found")
+        # Return empty snapshot instead of 404
+        return DashboardSnapshot(
+            partnerId=partner_id,
+            campaignsToday=0,
+            runningCampaigns=0,
+            activeCalls=0,
+            queuedCalls=0,
+            completedCallsToday=0,
+            voicemailCount=0,
+            customerEndedCount=0,
+            remainingCalls=0,
+            concurrencyLimit=0,
+            utilizationPercent=0.0,
+            alertLevel=AlertLevel.NORMAL,
+            alertMessage="No data available",
+            snapshotTime=datetime.now(timezone.utc),
+            dataFetchTimeMs=0
+        )
     return DashboardSnapshot(**snapshot)
 
 @api_router.get("/partners/{partner_id}/campaigns")

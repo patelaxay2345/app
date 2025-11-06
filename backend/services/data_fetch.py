@@ -210,7 +210,13 @@ class DataFetchService:
             campaigns_today = results[1][0]['count'] if results[1] and len(results[1]) > 0 else 0
             active_calls = results[2][0]['count'] if results[2] and len(results[2]) > 0 else 0
             queued_calls = results[3][0]['count'] if results[3] and len(results[3]) > 0 else 0
-            completed_calls_today = results[4][0]['count'] if results[4] and len(results[4]) > 0 else 0
+            
+            # Completed calls with breakdown
+            completed_data = results[4][0] if results[4] and len(results[4]) > 0 else {}
+            completed_calls_today = completed_data.get('total_count', 0)
+            voicemail_count = completed_data.get('voicemail_count', 0)
+            customer_ended_count = completed_data.get('customer_ended_count', 0)
+            
             remaining_calls = results[5][0]['count'] if results[5] and len(results[5]) > 0 else 0
             
             # Handle concurrency sync

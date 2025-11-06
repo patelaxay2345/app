@@ -504,6 +504,18 @@ function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
+                        <Switch
+                          checked={partner.partner.pauseNonPriorityCampaigns || false}
+                          onCheckedChange={() => handleTogglePauseNonPriority(
+                            partner.partner.id,
+                            partner.partner.partnerName,
+                            partner.partner.pauseNonPriorityCampaigns
+                          )}
+                          disabled={togglingPause === partner.partner.id}
+                          className="data-[state=checked]:bg-green-500"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getAlertBadge(
                             alertLevel

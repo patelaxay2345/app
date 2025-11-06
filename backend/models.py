@@ -140,7 +140,7 @@ class ConnectionLog(BaseModel):
     errorMessage: Optional[str] = None
     responseTimeMs: int = 0
     queryType: str = "dashboard_metrics"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Alert Log Models
 class AlertLog(BaseModel):

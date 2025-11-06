@@ -169,9 +169,17 @@ class DataFetchService:
                     'query': "SELECT COUNT(*) as count FROM calls WHERE status = 'QUEUED'",
                     'params': None
                 },
-                # Query 5: Completed calls today
+                # Query 5: Completed calls today (ENDED status with breakdown)
                 {
-                    'query': "SELECT COUNT(*) as count FROM calls WHERE status = 'COMPLETED' AND DATE(updatedAt) = CURDATE()",
+                    'query': """
+                        SELECT 
+                            COUNT(*) as total_count,
+                            SUM(CASE WHEN endReason = 'voicemail' THEN 1 ELSE 0 END) as voicemail_count,
+                            SUM(CASE WHEN endReason = 'customer-ended-call' THEN 1 ELSE 0 END) as customer_ended_count
+                        FROM calls 
+                        WHERE status = 'ENDED' 
+                        AND DATE(updatedAt) = CURDATE()
+                    """,
                     'params': None
                 },
                 # Query 6: Remaining calls

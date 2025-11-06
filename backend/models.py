@@ -77,6 +77,7 @@ class PartnerConfigBase(BaseModel):
     dbType: str = "mysql"  # "mysql" or "mongodb"
     sshConfig: SSHConfig
     concurrencyLimit: int = 10
+    pauseNonPriorityCampaigns: bool = False
     isActive: bool = True
 
 class PartnerConfigCreate(PartnerConfigBase):

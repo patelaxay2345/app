@@ -110,7 +110,7 @@ class SystemSetting(BaseModel):
     settingKey: str
     settingValue: Any
     description: Optional[str] = None
-    updatedAt: datetime = Field(default_factory=datetime.utcnow)
+    updatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updatedBy: Optional[str] = None
 
 # Dashboard Snapshot Models

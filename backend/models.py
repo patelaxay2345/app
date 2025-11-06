@@ -128,7 +128,7 @@ class DashboardSnapshot(BaseModel):
     utilizationPercent: float = 0.0
     alertLevel: AlertLevel = AlertLevel.NORMAL
     alertMessage: Optional[str] = None
-    snapshotTime: datetime = Field(default_factory=datetime.utcnow)
+    snapshotTime: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     dataFetchTimeMs: int = 0
 
 # Connection Log Models

@@ -384,6 +384,56 @@ async def update_partner_concurrency(partner_id: str, update: ConcurrencyUpdate,
     )
     return result
 
+@api_router.post("/partners/{partner_id}/pause-non-priority")
+async def toggle_pause_non_priority(partner_id: str, toggle: dict, current_user: User = Depends(get_current_user)):
+    """Toggle pauseNonPriorityCampaigns setting for a partner"""
+    enabled = toggle.get('enabled', False)
+    
+    # Get partner
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    
+    partner = PartnerConfig(**partner_data)
+    
+    # Update in admin MongoDB
+    await db.partner_configs.update_one(
+        {"id": partner_id},
+        {"$set": {"pauseNonPriorityCampaigns": enabled, "updatedAt": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Update in partner's MySQL database and add audit log
+    try:
+        # Get old value for audit
+        get_old_query = "SELECT value FROM settings WHERE name = 'pauseNonPriorityCampaigns'"
+        old_result = await ssh_service.execute_query(partner, get_old_query)
+        old_value = old_result[0]['value'] if old_result and len(old_result) > 0 else 'false'
+        
+        # Update setting in partner database
+        update_query = "UPDATE settings SET value = %s WHERE name = 'pauseNonPriorityCampaigns'"
+        await ssh_service.execute_update(partner, update_query, ('true' if enabled else 'false',))
+        
+        # Insert audit log
+        audit_query = """
+            INSERT INTO settings_auditlogs (userid, oldvalue, newvalue, createdat)
+            VALUES (9999999999, %s, %s, NOW())
+        """
+        await ssh_service.execute_update(partner, audit_query, (old_value, 'true' if enabled else 'false'))
+        
+        return {
+            "success": True,
+            "message": f"pauseNonPriorityCampaigns {'enabled' if enabled else 'disabled'}",
+            "syncedToPartner": True
+        }
+    except Exception as e:
+        logger.error(f"Error syncing pauseNonPriorityCampaigns to partner database: {str(e)}")
+        return {
+            "success": True,
+            "message": f"pauseNonPriorityCampaigns {'enabled' if enabled else 'disabled'} in admin only",
+            "syncedToPartner": False,
+            "syncError": str(e)
+        }
+
 @api_router.put("/concurrency/{partner_id}")
 async def update_concurrency(partner_id: str, update: ConcurrencyUpdate, current_user: User = Depends(get_current_user)):
     result = await concurrency_service.update_concurrency(

@@ -88,8 +88,8 @@ class PartnerConfig(PartnerConfigBase):
     lastSyncAt: Optional[datetime] = None
     lastSyncStatus: SyncStatus = SyncStatus.NEVER_SYNCED
     lastErrorMessage: Optional[str] = None
-    createdAt: datetime = Field(default_factory=datetime.utcnow)
-    updatedAt: datetime = Field(default_factory=datetime.utcnow)
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class PartnerConfigUpdate(BaseModel):
     partnerName: Optional[str] = None

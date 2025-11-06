@@ -135,6 +135,30 @@ function Dashboard() {
     }
   };
 
+  const handleTogglePauseNonPriority = async (partnerId, partnerName, currentValue) => {
+    setTogglingPause(partnerId);
+    try {
+      const response = await axios.post(`${API}/partners/${partnerId}/pause-non-priority`, {
+        enabled: !currentValue
+      });
+      
+      if (response.data.syncedToPartner) {
+        toast.success(`Pause non-priority campaigns ${!currentValue ? 'enabled' : 'disabled'} for ${partnerName}`);
+      } else {
+        toast.success(`Setting updated in admin only for ${partnerName}`);
+        if (response.data.syncError) {
+          toast.warning(`Partner sync failed: ${response.data.syncError}`);
+        }
+      }
+      
+      fetchDashboardData();
+    } catch (error) {
+      toast.error('Failed to update setting');
+    } finally {
+      setTogglingPause(null);
+    }
+  };
+
   const filteredPartners = selectedPartner === 'all' 
     ? partners 
     : partners.filter(p => p.partner.id === selectedPartner);

@@ -168,7 +168,7 @@ class ConcurrencyHistory(BaseModel):
     newLimit: int
     reason: Optional[str] = None
     changedBy: str
-    changedAt: datetime = Field(default_factory=datetime.utcnow)
+    changedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     syncedToPartner: bool = False
     syncError: Optional[str] = None
     syncedAt: Optional[datetime] = None

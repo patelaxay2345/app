@@ -241,6 +241,8 @@ class DataFetchService:
                 'activeCalls': active_calls,
                 'queuedCalls': queued_calls,
                 'completedCallsToday': completed_calls_today,
+                'voicemailCount': voicemail_count,
+                'customerEndedCount': customer_ended_count,
                 'remainingCalls': remaining_calls,
             }
             

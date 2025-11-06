@@ -100,6 +100,8 @@ class DataFetchService:
                     activeCalls=metrics['activeCalls'],
                     queuedCalls=metrics['queuedCalls'],
                     completedCallsToday=metrics.get('completedCallsToday', 0),
+                    voicemailCount=metrics.get('voicemailCount', 0),
+                    customerEndedCount=metrics.get('customerEndedCount', 0),
                     remainingCalls=metrics.get('remainingCalls', 0),
                     concurrencyLimit=partner.concurrencyLimit,
                     utilizationPercent=round(utilization, 2),

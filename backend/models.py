@@ -123,6 +123,8 @@ class DashboardSnapshot(BaseModel):
     activeCalls: int = 0
     queuedCalls: int = 0
     completedCallsToday: int = 0
+    voicemailCount: int = 0
+    customerEndedCount: int = 0
     remainingCalls: int = 0
     concurrencyLimit: int = 10
     utilizationPercent: float = 0.0

@@ -1861,6 +1861,69 @@ async def get_public_stats(
         logger.error(f"Error in public stats endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Error fetching statistics")
 
+# ============= Documentation Routes =============
+@api_router.get(
+    "/docs/public-api",
+    tags=["Documentation"],
+    summary="Get public API documentation",
+    description="""
+    Retrieve the complete public API documentation in markdown format.
+    
+    **Authentication Required:** No
+    
+    **Returns:**
+    - Markdown content of the public API documentation
+    
+    **Use Cases:**
+    - View API documentation
+    - Integration reference
+    - Code examples
+    """
+)
+async def get_public_api_docs():
+    """
+    Serve the public API documentation markdown file
+    """
+    try:
+        doc_path = Path("/app/PUBLIC_API_DOCUMENTATION.md")
+        if doc_path.exists():
+            content = doc_path.read_text()
+            return {"content": content, "format": "markdown"}
+        else:
+            raise HTTPException(status_code=404, detail="Documentation not found")
+    except Exception as e:
+        logger.error(f"Error reading documentation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error reading documentation")
+
+@api_router.get(
+    "/docs/public-api-example",
+    tags=["Documentation"],
+    summary="Get public API example HTML",
+    description="""
+    Retrieve the interactive example HTML for testing the public API.
+    
+    **Authentication Required:** No
+    
+    **Returns:**
+    - HTML content with working examples
+    """
+)
+async def get_public_api_example():
+    """
+    Serve the public API example HTML file
+    """
+    try:
+        from fastapi.responses import HTMLResponse
+        example_path = Path("/app/PUBLIC_API_EXAMPLE.html")
+        if example_path.exists():
+            content = example_path.read_text()
+            return HTMLResponse(content=content)
+        else:
+            raise HTTPException(status_code=404, detail="Example not found")
+    except Exception as e:
+        logger.error(f"Error reading example: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error reading example")
+
 # Health check
 @app.get(
     "/health",

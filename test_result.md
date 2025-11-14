@@ -134,9 +134,9 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 2
-  run_ui: true
+  version: "1.2"
+  test_sequence: 0
+  run_ui: false
 
 test_plan:
   current_focus: []

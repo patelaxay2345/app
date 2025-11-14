@@ -1084,7 +1084,30 @@ async def get_alerts(resolved: Optional[bool] = False, current_user: User = Depe
     alerts = await db.alert_logs.find(query, {"_id": 0}).sort("createdAt", -1).limit(100).to_list(100)
     return alerts
 
-@api_router.get("/alerts/summary", response_model=AlertSummary)
+@api_router.get(
+    "/alerts/summary",
+    response_model=AlertSummary,
+    tags=["Alerts"],
+    summary="Get alert summary",
+    description="""
+    Get quick summary count of active alerts by level.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - critical: Count of CRITICAL alerts
+    - high: Count of HIGH alerts
+    - medium: Count of MEDIUM alerts
+    - offline: Count of ERROR alerts (partner connectivity issues)
+    
+    **Use Cases:**
+    - Dashboard alert badge
+    - Quick health indicator
+    - Alert notification count
+    
+    **Note:** Only includes active (not dismissed and not resolved) alerts.
+    """
+)
 async def get_alert_summary(current_user: User = Depends(get_current_user)):
     active_alerts = await db.alert_logs.find({"isResolved": False, "isDismissed": False}, {"_id": 0}).to_list(1000)
     

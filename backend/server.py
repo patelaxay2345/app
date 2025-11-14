@@ -949,7 +949,39 @@ async def update_concurrency(partner_id: str, update: ConcurrencyUpdate, current
     )
     return result
 
-@api_router.put("/concurrency/bulk")
+@api_router.put(
+    "/concurrency/bulk",
+    tags=["Concurrency Management"],
+    summary="Bulk update concurrency",
+    description="""
+    Update concurrency limit for multiple partners at once.
+    
+    **Authentication Required:** Yes
+    
+    **Request Body:**
+    ```json
+    {
+        "partnerIds": ["uuid1", "uuid2", "uuid3"],
+        "newLimit": 50,
+        "reason": "Bulk adjustment for system optimization"
+    }
+    ```
+    
+    **Process:**
+    - Applies same limit to all specified partners
+    - Updates both admin and partner databases
+    - Records individual history for each partner
+    
+    **Returns:**
+    - Array of results (one per partner)
+    - Each result contains success/failure status
+    
+    **Use Cases:**
+    - System-wide capacity adjustment
+    - Emergency scaling
+    - Batch configuration updates
+    """
+)
 async def bulk_update_concurrency(update: BulkConcurrencyUpdate, current_user: User = Depends(get_current_user)):
     results = []
     for partner_id in update.partnerIds:

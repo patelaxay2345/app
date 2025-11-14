@@ -490,7 +490,21 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
     updated_partner = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     return PartnerConfig(**updated_partner)
 
-@api_router.delete("/partners/{partner_id}")
+@api_router.delete(
+    "/partners/{partner_id}",
+    tags=["Partner Management"],
+    summary="Delete partner",
+    description="""
+    Permanently delete a partner configuration.
+    
+    **Authentication Required:** Yes
+    
+    **Warning:** This action is irreversible.
+    
+    **Errors:**
+    - 404: Partner not found
+    """
+)
 async def delete_partner(partner_id: str, current_user: User = Depends(get_current_user)):
     result = await db.partner_configs.delete_one({"id": partner_id})
     if result.deleted_count == 0:

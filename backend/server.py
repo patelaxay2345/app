@@ -1118,7 +1118,31 @@ async def get_alert_summary(current_user: User = Depends(get_current_user)):
     
     return AlertSummary(critical=critical, high=high, medium=medium, offline=offline)
 
-@api_router.put("/alerts/{alert_id}/dismiss")
+@api_router.put(
+    "/alerts/{alert_id}/dismiss",
+    tags=["Alerts"],
+    summary="Dismiss alert",
+    description="""
+    Dismiss an alert for a specified duration.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - alert_id: UUID of the alert
+    - hours: Duration to dismiss (default: 24 hours)
+    
+    **Process:**
+    - Marks alert as dismissed
+    - Records who dismissed it and when
+    - Sets dismissedUntil timestamp
+    - Alert may reappear after dismissal period
+    
+    **Use Cases:**
+    - Acknowledge known issues
+    - Temporarily hide alerts during maintenance
+    - Manage alert fatigue
+    """
+)
 async def dismiss_alert(alert_id: str, hours: int = 24, current_user: User = Depends(get_current_user)):
     await db.alert_logs.update_one(
         {"id": alert_id},

@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Partners from './pages/Partners';
 import Settings from './pages/Settings';
 import PartnerDetail from './pages/PartnerDetail';
+import PublicApiDocs from './pages/PublicApiDocs';
 import './App.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;

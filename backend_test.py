@@ -577,12 +577,17 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
                     else:
                         self.log_result("public_stats_default_format", False, f"Missing required fields: {missing_fields}")
                     
-                    # Check CORS headers
-                    cors_header = headers.get("access-control-allow-origin")
+                    # Check CORS headers (case-insensitive)
+                    cors_header = None
+                    for key, value in headers.items():
+                        if key.lower() == "access-control-allow-origin":
+                            cors_header = value
+                            break
+                    
                     if cors_header:
                         self.log_result("public_stats_cors_headers", True, f"CORS header present: {cors_header}")
                     else:
-                        self.log_result("public_stats_cors_headers", False, "CORS header missing")
+                        self.log_result("public_stats_cors_headers", False, f"CORS header missing. Available headers: {list(headers.keys())}")
                         
                 else:
                     error_text = await response.text()

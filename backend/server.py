@@ -129,7 +129,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 # ============= Authentication Routes =============
-@api_router.post("/auth/register", response_model=User)
+@api_router.post(
+    "/auth/register",
+    response_model=User,
+    tags=["Authentication"],
+    summary="Register new user",
+    description="""
+    Register a new user account.
+    
+    **Requirements:**
+    - Username must be unique
+    - Email must be unique and valid
+    - Password will be securely hashed before storage
+    
+    **Returns:**
+    - User object with generated UUID
+    - Password hash is not included in response
+    
+    **Note:** This endpoint does not require authentication.
+    """
+)
 async def register(user_input: UserCreate):
     # Check if user exists
     existing = await db.users.find_one({"username": user_input.username}, {"_id": 0})

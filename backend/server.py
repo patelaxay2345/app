@@ -769,7 +769,31 @@ async def get_dashboard_partners(current_user: User = Depends(get_current_user))
     
     return result
 
-@api_router.post("/dashboard/refresh")
+@api_router.post(
+    "/dashboard/refresh",
+    tags=["Dashboard"],
+    summary="Refresh all dashboard data",
+    description="""
+    Trigger immediate data refresh for all active partners.
+    
+    **Authentication Required:** Yes
+    
+    **Process:**
+    1. Iterates through all active partners
+    2. Fetches latest metrics from each partner database
+    3. Updates dashboard snapshots
+    4. Processes alerts if thresholds exceeded
+    
+    **Performance:**
+    - Executes partners in batches (respects concurrentPartnerLimit setting)
+    - May take several seconds for multiple partners
+    
+    **Use Cases:**
+    - Manual refresh button
+    - On-demand data update
+    - After configuration changes
+    """
+)
 async def refresh_dashboard(current_user: User = Depends(get_current_user)):
     await data_fetch_service.fetch_all_partners()
     return {"message": "Dashboard refresh completed"}

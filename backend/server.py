@@ -597,7 +597,30 @@ async def clear_partner_logs(partner_id: str, current_user: User = Depends(get_c
     result = await db.connection_logs.delete_many({"partnerId": partner_id})
     return {"message": f"Deleted {result.deleted_count} connection logs"}
 
-@api_router.get("/partners/{partner_id}/history", response_model=List[ConcurrencyHistory])
+@api_router.get(
+    "/partners/{partner_id}/history",
+    response_model=List[ConcurrencyHistory],
+    tags=["Partner Management"],
+    summary="Get concurrency change history",
+    description="""
+    Retrieve history of concurrency limit changes for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - partner_id: UUID of the partner
+    - limit: Maximum number of history records (default: 20)
+    
+    **Returns:**
+    - List of concurrency changes (most recent first)
+    - Each record includes old/new values, reason, and who made the change
+    
+    **Use Cases:**
+    - Audit concurrency adjustments
+    - Track performance tuning
+    - Review administrative changes
+    """
+)
 async def get_concurrency_history(partner_id: str, limit: int = 20, current_user: User = Depends(get_current_user)):
     history = await db.concurrency_history.find({"partnerId": partner_id}, {"_id": 0}).sort("changedAt", -1).limit(limit).to_list(limit)
     return history

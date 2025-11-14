@@ -382,8 +382,7 @@ function Settings() {
                   No authentication required.
                 </p>
                 <a 
-                  href="/app/PUBLIC_API_DOCUMENTATION.md" 
-                  target="_blank"
+                  href="/public-api-docs"
                   className="text-xs text-blue-400 hover:underline inline-block"
                 >
                   View complete documentation →

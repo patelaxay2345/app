@@ -843,9 +843,41 @@ async def update_partner_concurrency(partner_id: str, update: ConcurrencyUpdate,
     )
     return result
 
-@api_router.post("/partners/{partner_id}/pause-non-priority")
+@api_router.post(
+    "/partners/{partner_id}/pause-non-priority",
+    tags=["Concurrency Management"],
+    summary="Toggle pause non-priority campaigns",
+    description="""
+    Enable or disable pausing of non-priority campaigns for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Request Body:**
+    ```json
+    {
+        "enabled": true
+    }
+    ```
+    
+    **Process:**
+    1. Updates MongoDB admin database
+    2. Updates partner's MySQL settings table
+    3. Records change in settings_auditlogs table
+    
+    **Returns:**
+    - Success status
+    - Sync status (whether partner DB was updated)
+    - Error details (if sync failed)
+    
+    **Use Cases:**
+    - Prioritize high-value campaigns
+    - Manage system load
+    - Emergency capacity management
+    
+    **Note:** If partner database sync fails, setting is still saved in admin DB.
+    """
+)
 async def toggle_pause_non_priority(partner_id: str, toggle: dict, current_user: User = Depends(get_current_user)):
-    """Toggle pauseNonPriorityCampaigns setting for a partner"""
     enabled = toggle.get('enabled', False)
     
     # Get partner

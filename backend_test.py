@@ -701,32 +701,40 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
             async with self.session.get(f"{API_BASE}/public/stats", headers=headers) as response:
                 response_headers = dict(response.headers)
                 
-                # Check for CORS headers
-                cors_headers = [
+                # Check for CORS headers (case-insensitive)
+                cors_headers_to_check = [
                     "access-control-allow-origin",
-                    "access-control-allow-methods",
-                    "access-control-allow-headers"
+                    "access-control-allow-methods", 
+                    "access-control-allow-headers",
+                    "access-control-allow-credentials"
                 ]
                 
                 found_cors_headers = []
-                for header in cors_headers:
-                    if header in response_headers:
-                        found_cors_headers.append(header)
+                for header_name in cors_headers_to_check:
+                    for key in response_headers.keys():
+                        if key.lower() == header_name:
+                            found_cors_headers.append(f"{header_name}: {response_headers[key]}")
+                            break
                 
                 if found_cors_headers:
                     self.log_result("public_stats_cors_present", True, f"CORS headers found: {found_cors_headers}")
                 else:
-                    self.log_result("public_stats_cors_present", False, "No CORS headers found")
+                    self.log_result("public_stats_cors_present", False, f"No CORS headers found. Available headers: {list(response_headers.keys())}")
                 
-                # Check Access-Control-Allow-Origin specifically
-                allow_origin = response_headers.get("access-control-allow-origin")
+                # Check Access-Control-Allow-Origin specifically (case-insensitive)
+                allow_origin = None
+                for key, value in response_headers.items():
+                    if key.lower() == "access-control-allow-origin":
+                        allow_origin = value
+                        break
+                
                 if allow_origin:
                     if allow_origin == "*" or "example.com" in allow_origin:
                         self.log_result("public_stats_cors_origin", True, f"Access-Control-Allow-Origin: {allow_origin}")
                     else:
                         self.log_result("public_stats_cors_origin", False, f"Unexpected CORS origin: {allow_origin}")
                 else:
-                    self.log_result("public_stats_cors_origin", False, "Access-Control-Allow-Origin header missing")
+                    self.log_result("public_stats_cors_origin", False, f"Access-Control-Allow-Origin header missing. Headers: {list(response_headers.keys())}")
                     
         except Exception as e:
             self.log_result("public_stats_cors", False, f"Test failed: {str(e)}")

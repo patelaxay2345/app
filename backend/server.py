@@ -1054,7 +1054,31 @@ async def calculate_suggested_concurrency(partner_id: str, current_user: User = 
     }
 
 # ============= Alert Routes =============
-@api_router.get("/alerts", response_model=List[AlertLog])
+@api_router.get(
+    "/alerts",
+    response_model=List[AlertLog],
+    tags=["Alerts"],
+    summary="Get alerts",
+    description="""
+    Retrieve alert logs filtered by resolution status.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - resolved: Filter by resolution status (default: false = active alerts)
+    
+    **Returns:**
+    - List of alerts (most recent first, max 100)
+    - Each alert includes level, message, partner info, and timestamps
+    
+    **Alert Levels:**
+    - CRITICAL: Immediate attention required
+    - HIGH: Important issues
+    - MEDIUM: Moderate concerns
+    - ERROR: Connection or system errors
+    - NORMAL: Informational
+    """
+)
 async def get_alerts(resolved: Optional[bool] = False, current_user: User = Depends(get_current_user)):
     query = {"isResolved": resolved}
     alerts = await db.alert_logs.find(query, {"_id": 0}).sort("createdAt", -1).limit(100).to_list(100)

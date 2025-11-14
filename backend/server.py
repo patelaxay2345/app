@@ -591,6 +591,137 @@ async def get_partner_campaigns(partner_id: str, page: int = 1, pageSize: int = 
         "pageSize": pageSize
     }
 
+@api_router.get("/partners/{partner_id}/period-stats")
+async def get_period_statistics(
+    partner_id: str,
+    start_date: str,
+    end_date: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get total calls and submitted candidates for a given time period
+    
+    Parameters:
+    - start_date: Start date in YYYY-MM-DD format
+    - end_date: End date in YYYY-MM-DD format
+    
+    Returns:
+    - totalCalls: Total number of calls in the period
+    - totalSubmittedCandidates: Total number of submitted candidates in the period
+    - callsByStatus: Breakdown of calls by status
+    - period: The queried time period
+    """
+    # Get partner configuration
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    
+    partner = PartnerConfig(**partner_data)
+    
+    try:
+        # Prepare queries for batch execution
+        queries = [
+            # Query 1: Total calls in period
+            {
+                'query': """
+                    SELECT COUNT(*) as total_calls
+                    FROM calls
+                    WHERE DATE(createdAt) BETWEEN %s AND %s
+                """,
+                'params': (start_date, end_date)
+            },
+            # Query 2: Calls by status breakdown
+            {
+                'query': """
+                    SELECT 
+                        status,
+                        COUNT(*) as count
+                    FROM calls
+                    WHERE DATE(createdAt) BETWEEN %s AND %s
+                    GROUP BY status
+                """,
+                'params': (start_date, end_date)
+            },
+            # Query 3: Total submitted candidates
+            {
+                'query': """
+                    SELECT COUNT(*) as total_submittals
+                    FROM ats_submittals
+                    WHERE DATE(createdAt) BETWEEN %s AND %s
+                """,
+                'params': (start_date, end_date)
+            },
+            # Query 4: Submitted candidates by status (if status column exists)
+            {
+                'query': """
+                    SELECT 
+                        status,
+                        COUNT(*) as count
+                    FROM ats_submittals
+                    WHERE DATE(createdAt) BETWEEN %s AND %s
+                    GROUP BY status
+                """,
+                'params': (start_date, end_date)
+            }
+        ]
+        
+        # Execute all queries through single SSH connection
+        results = await ssh_service.execute_batch_queries(partner, queries)
+        
+        # Extract total calls
+        total_calls = results[0][0]['total_calls'] if results[0] and len(results[0]) > 0 else 0
+        
+        # Extract calls by status
+        calls_by_status = {}
+        if results[1] and len(results[1]) > 0:
+            for row in results[1]:
+                calls_by_status[row['status']] = row['count']
+        
+        # Extract total submittals
+        total_submittals = results[2][0]['total_submittals'] if results[2] and len(results[2]) > 0 else 0
+        
+        # Extract submittals by status
+        submittals_by_status = {}
+        if results[3] and len(results[3]) > 0:
+            for row in results[3]:
+                submittals_by_status[row['status']] = row['count']
+        
+        return {
+            "success": True,
+            "period": {
+                "startDate": start_date,
+                "endDate": end_date
+            },
+            "calls": {
+                "total": total_calls,
+                "byStatus": calls_by_status
+            },
+            "submittals": {
+                "total": total_submittals,
+                "byStatus": submittals_by_status
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching period statistics: {str(e)}")
+        # Return empty data instead of error
+        return {
+            "success": False,
+            "error": str(e),
+            "period": {
+                "startDate": start_date,
+                "endDate": end_date
+            },
+            "calls": {
+                "total": 0,
+                "byStatus": {}
+            },
+            "submittals": {
+                "total": 0,
+                "byStatus": {}
+            }
+        }
+
 # Health check
 @app.get("/health")
 async def health_check():

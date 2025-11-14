@@ -726,6 +726,32 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
         except Exception as e:
             self.log_result("public_stats_cors", False, f"Test failed: {str(e)}")
     
+    async def run_public_api_tests_only(self):
+        """Run only public API tests"""
+        print(f"🚀 Starting Public API Tests for JobTalk Admin Dashboard")
+        print(f"=" * 60)
+        
+        try:
+            # Setup session but skip authentication for public API tests
+            print(f"🔧 Setting up test environment...")
+            print(f"Backend URL: {API_BASE}")
+            self.session = aiohttp.ClientSession()
+            
+            # Run public API test scenarios
+            await self.test_public_stats_default_behavior()
+            await self.test_public_stats_custom_date_range()
+            await self.test_public_stats_no_authentication()
+            await self.test_public_stats_error_handling()
+            await self.test_public_stats_cors_headers()
+            
+        finally:
+            # Close session
+            if self.session:
+                await self.session.close()
+        
+        # Print summary
+        self.print_summary()
+
     async def run_all_tests(self):
         """Run all test scenarios"""
         print(f"🚀 Starting JobTalk Admin Dashboard Backend Tests")

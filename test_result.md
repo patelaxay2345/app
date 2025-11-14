@@ -111,7 +111,31 @@ user_problem_statement: |
   4. CORS configuration manageable via admin settings for multiple domains
 
 backend:
-  - task: "Add comprehensive API documentation tags and descriptions"
+  - task: "Create public API endpoint for statistics"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created public endpoint /api/public/stats that doesn't require authentication. Supports optional query params: partner_id (for specific partner or all partners), start_date and end_date (default: last 30 days). Returns simple JSON with total calls and submittals count."
+  
+  - task: "Add CORS configuration for public API"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented custom CORS middleware that dynamically checks allowed domains from system settings. Added 'publicApiAllowedDomains' setting to manage allowed domains (comma-separated). Empty value allows all origins. Middleware checks setting for /api/public/* routes specifically."
+  
+  - task: "Add publicApiAllowedDomains system setting"
     implemented: true
     working: true
     file: "/app/backend/server.py"
@@ -121,7 +145,7 @@ backend:
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Enhanced all 34 API endpoints with detailed tags, summaries, and descriptions. Organized endpoints into 9 logical groups: Authentication, Partner Management, Dashboard, Concurrency Management, Alerts, System Settings, Partner Details, Statistics & Reporting, and System. Each endpoint now includes detailed documentation with authentication requirements, parameters, request/response formats, use cases, and examples."
+        comment: "Added new system setting 'publicApiAllowedDomains' with description. This setting stores comma-separated list of allowed domains for public API CORS. Admins can manage this through the settings UI to add multiple domains dynamically."
 
 frontend:
   - task: "No frontend changes required"

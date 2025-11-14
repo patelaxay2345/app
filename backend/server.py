@@ -238,7 +238,19 @@ async def login(credentials: UserLogin):
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
-@api_router.post("/auth/logout")
+@api_router.post(
+    "/auth/logout",
+    tags=["Authentication"],
+    summary="User logout",
+    description="""
+    Logout the current user.
+    
+    **Authentication Required:** Yes
+    
+    **Note:** Since JWT tokens are stateless, client must discard the token.
+    The server acknowledges the logout but cannot invalidate the token.
+    """
+)
 async def logout(current_user: User = Depends(get_current_user)):
     return {"message": "Logged out successfully"}
 

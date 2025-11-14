@@ -658,7 +658,36 @@ async def force_sync(partner_id: str, current_user: User = Depends(get_current_u
     return {"message": "Sync initiated successfully"}
 
 # ============= Dashboard Routes =============
-@api_router.get("/dashboard/overview", response_model=DashboardOverview)
+@api_router.get(
+    "/dashboard/overview",
+    response_model=DashboardOverview,
+    tags=["Dashboard"],
+    summary="Get dashboard overview",
+    description="""
+    Retrieve aggregated metrics across all partners.
+    
+    **Authentication Required:** Yes
+    
+    **Metrics Included:**
+    - Total campaigns today
+    - Running campaigns
+    - Active calls
+    - Queued calls
+    - Completed calls today
+    - Remaining calls
+    - Total and active partner count
+    - Average utilization percentage
+    
+    **Data Source:**
+    - Aggregates latest snapshots from all partners
+    - Real-time calculation from most recent sync
+    
+    **Use Cases:**
+    - Main dashboard view
+    - High-level monitoring
+    - Quick health check
+    """
+)
 async def get_dashboard_overview(current_user: User = Depends(get_current_user)):
     # Get all partners
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)

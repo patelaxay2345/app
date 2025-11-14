@@ -1,139 +1,90 @@
 <analysis>
-The previous AI engineer successfully transformed a basic JobTalk Admin Dashboard into a deployment-ready application. Initial tasks focused on establishing CI/CD pipelines for GitLab, covering both production and development environments using Docker and Docker Compose. This involved extensive file generation for CI/CD, deployment scripts, and environmental configurations.
+The trajectory documents a comprehensive development cycle, moving the JobTalk Admin Dashboard from a basic application to a feature-rich, deployment-ready state. The work began with foundational CI/CD and deployment setup, which involved significant debugging of GitLab CI YAML files and local environment scripts.
 
-Key challenges arose during the process, including repeated YAML syntax errors in the GitLab CI file, necessitating multiple corrections. Local development issues, such as incorrect color code rendering and WebSocket connection failures, were systematically debugged and fixed by adjusting environment variables and scripts.
+A major pivot was the integration with a partner's live MySQL database (ApTask) via SSH, replacing mock data. This introduced several challenges: debugging SSH tunnel connections, fixing  library incompatibilities, and resolving a critical bug where SSH keys were being double-encrypted upon editing. The engineer successfully implemented a robust solution using the  library and fixed the encryption logic in both the backend and frontend.
 
-A significant portion of the work involved integrating a partner's live MySQL database (ApTask) to fetch real data, replacing mock data. This required implementing and debugging SSH tunneling with password authentication, initially encountering  compatibility issues that were resolved by downgrading the library.
+Following this, the engineer iteratively responded to a series of user requests, demonstrating a tight feedback loop. These included:
+- **UI/UX Enhancements**: Adding loaders for all API calls, implementing skeleton loaders for better page-load experience, and improving UI component visibility (e.g., the toggle switch).
+- **Feature Additions**: Implementing dashboard filters (by partner), inline concurrency editing, a Clear Logs function, and password change/reset functionality.
+- **Bug Fixes**: Correcting timezone-related timestamp errors, fixing a 404 error on empty metrics, and resolving an SQL error related to audit logging.
+- **API Development**: Creating new endpoints for period-based statistics and aggregated data across all partners.
+- **Optimization**: Refactoring SSH connections to use batch queries, significantly reducing redundant connections.
 
-Furthermore, the engineer addressed critical security concerns by cleaning up hardcoded credentials from the Git history and establishing proper  files. The engineer also fixed various runtime errors related to database connection and data fetching logic, ensuring the backend could successfully retrieve and process real partner metrics. The final phase, which is currently ongoing, involves updating the frontend to reflect the new SSH authentication options.
+The process concluded with the initiation of API documentation, starting with a markdown file and moving to enhance the auto-generated Swagger UI.
 </analysis>
 
 <product_requirements>
-The user requires a JobTalk Admin Dashboard, a full-stack application (FastAPI backend, React frontend, MongoDB database) to manage partners, display dashboards, handle concurrency, alerts, and SSH connections. The initial request was to make this application deployment-ready for GitLab CI/CD, supporting both production and development environments. The user specified deployment targets: GitLab for CI/CD, Linode with Ubuntu/Docker for servers, and MongoDB Atlas for the main database.
+The goal is to build and enhance the JobTalk Admin Dashboard, a full-stack application (React, FastAPI, MongoDB) for managing partners and monitoring their performance.
 
-Subsequently, a critical requirement emerged to integrate with a partner's live database (ApTask), specifically a MySQL database, to fetch real campaign, call, and metric data, replacing existing mock data. This integration needed secure SSH tunneling, including support for username/password authentication as the primary method, with SSH keys being optional. The application also needed to handle sensitive credentials securely, preventing their exposure in version control. The application should now display real-time data fetched from this external MySQL database via an SSH tunnel on the dashboard, while the JobTalk application's own data (e.g., partner configurations) would reside in a separate MongoDB instance.
+Initial requirements focused on making the application deployment-ready with a GitLab CI/CD pipeline for production and development environments.
+
+The core functional requirement evolved to integrating with a partner's live MySQL database (ApTask) to display real-time metrics. This required a secure SSH tunnel connection, with a user-specified priority for password-based authentication over private keys. The system must securely handle credentials, preventing them from being stored in version control.
+
+Subsequent user requests expanded the scope to include:
+1.  **Dashboard Enhancements**: Filters to view data per-partner, the ability to update a partner's call concurrency directly from the dashboard, and displaying detailed call statistics (completed/remaining).
+2.  **UX Improvements**: Visual feedback (loaders/skeletons) during all data-fetching and background operations.
+3.  **Administration**: User password change/reset functionality, and a feature to clear old connection logs.
+4.  **Reporting**: API endpoints to retrieve aggregated call and candidate submission statistics for specific time periods, both per-partner and for all partners combined.
+5.  **Operational Control**: A toggle to enable/disable a  setting for each partner.
 </product_requirements>
 
 <key_technical_concepts>
-- **Full-stack Development**: React (frontend), FastAPI (backend), MongoDB (main database).
-- **Deployment**: GitLab CI/CD, Docker, Docker Compose, Nginx, Supervisor.
-- **Database Integration**: MySQL (partner DB), PyMySQL, sshtunnel, Paramiko.
-- **Security**: Environment variables, , Git history cleanup.
-- **System Admin**: SSH (password/key authentication), shell scripting.
+- **Full-stack**: React frontend, FastAPI (Python) backend.
+- **Databases**: MongoDB (application data), MySQL (external partner data).
+- **Connectivity**: Secure data fetching from MySQL via SSH tunnels using  and .
+- **Deployment & CI/CD**: Docker, Docker Compose, GitLab CI, Nginx, Supervisor.
+- **Security**: Environment variables for secrets, encryption of credentials (, ) in the database, Git history cleanup.
+- **API**: Pydantic for data modeling and validation, JWT for authentication.
 </key_technical_concepts>
 
 <code_architecture>
-The application has a standard full-stack structure:
-
-
--   ****: Central file for GitLab CI/CD pipeline, defining build and deploy stages for  (production) and  branches. This was extensively modified to fix YAML syntax errors related to heredoc and / placeholders.
--   ****: Defines Pydantic models for database entities.  was updated to include an optional  field for SSH authentication.  was updated to support both MySQL and MongoDB database types and include .
--   ****: Handles establishing SSH tunnels and executing database queries (MySQL). This file was heavily modified to:
-    -   Support password-based SSH authentication ( parameter in ).
-    -   Switch from direct  channel passing to  to using the  library for more robust SSH tunnel management.
-    -   Ensure  correctly handles query execution and result fetching.
--   ****: Responsible for fetching data from partners. Modified to:
-    -   Replace mock data fetching with actual queries to the partner's MySQL database via .
-    -   Correctly process the output format from  (list of dictionaries).
--   **, **: Example environment files created for production and development, respectively, detailing necessary environment variables without sensitive values.
--   **, **: Actual environment files. The  was fixed for local development (removing ). The  was updated to use a proper MongoDB URL for the JobTalk dashboard, distinct from the partner's database, and later recreated after accidental deletion.
--   ****: A new script created to automate the local development environment setup. It was updated to correctly copy  files and to output colored text using .
--   **, , , **: These documentation files were created or updated to provide comprehensive guides for development setup, deployment, environment variables, and troubleshooting, including a fix for WebSocket errors.
--   ****: Updated multiple times to ensure  files and various temporary or sensitive files are not committed to version control.
--   **, ╔════════════════════════════════════════════════════════════╗
-║                                                            ║
-║  Quick Add Partner - SSH Password Authentication          ║
-║                                                            ║
-╚════════════════════════════════════════════════════════════╝
-
-This script will help you add a partner using SSH password.
-All credentials will be encrypted before storage.
-
-
-Database Configuration:
-
-
-SSH Configuration:
+The application follows a standard monolithic repository structure with separate  and  directories.
 
 
 
-═══════════════════════════════════════════════════════════
-Partner Configuration Summary:
-═══════════════════════════════════════════════════════════
-  Partner Name: 
-  Database: :3306/
-  SSH Tunnel: :22
-  SSH User: 
-  SSH Auth: Password
-  Concurrency Limit: 50
-═══════════════════════════════════════════════════════════
+-   ****
+    -   **Importance**: The core of the backend, defining all FastAPI API routes, handling incoming requests, and orchestrating calls to service modules.
+    -   **Changes**: This file was heavily modified to add numerous endpoints: partner CRUD, SSH credential validation, concurrency updates (), password changes, log clearing, and new statistical reporting endpoints (, ). Logic was also added to fix an SSH key double-encryption bug during partner updates.
 
-Aborted.**: New scripts for securely adding partner configurations to the JobTalk database, leveraging environment variables rather than hardcoded credentials.
--   **, ======================================================================
-  Git History Cleanup - Remove Sensitive Files
-======================================================================
+-   ****
+    -   **Importance**: Manages all SSH tunneling and MySQL query execution against partner databases. This is a critical component for data integration.
+    -   **Changes**: Underwent a major architectural refactor. It was updated from a buggy, direct  channel implementation to a robust one using the  library. A method for executing updates () was added. Most significantly, a  method was implemented to reuse a single SSH connection for multiple queries, drastically improving performance and reducing log noise.
 
-⚠️  WARNING: This will rewrite git history!
-   Only proceed if you understand the consequences.
+-   ****
+    -   **Importance**: Contains the logic for fetching and processing all real-time metrics from partner databases.
+    -   **Changes**: Modified to use the new  method for efficiency. Queries were added and corrected to fetch new metrics like Completed Calls Today (using  status) and Remaining Calls. Logic was also added to sync the  setting from the partner's  table back to the application's MongoDB.
 
-Files to be removed from history:
-  - backend/.env
-  - add-aptask-partner.py
-  - test-partner-setup.py
-  - test-ssh-mongo.py
-  - test-ssh-tunnel.py
-  - test-mysql-tunnel.py
+-   ****
+    -   **Importance**: The main dashboard page, displaying aggregated metrics and a list of partners.
+    -   **Changes**: Significantly updated to add UI for new features: a partner filter dropdown for both overview metrics and the partner list, and inline editing for partner concurrency limits. Implemented skeleton loaders for a better loading experience and added a  toggle switch in the partner table.
 
-Aborting...**: Documents and a script created to guide the user on manually cleaning up sensitive credentials from Git history.
--   ****: Updated to include  and to pin  to a compatible version () to resolve  errors.
+-   ****
+    -   **Importance**: The page for managing partner configurations (create, edit, delete).
+    -   **Changes**: The partner creation/edit form was updated to include an SSH password field, making it the primary authentication method. Validation was added to require either a password or a private key. The logic was fixed to prevent showing encrypted values in the form and to stop the double-encryption bug on save. Loaders were added to buttons for user feedback.
+
+-   ****
+    -   **Importance**: Defines all Pydantic data models used for API requests/responses and database storage.
+    -   **Changes**: Updated multiple times to support new features. The  model was modified to include an optional .  and  were expanded to include  and .  was updated with the  flag. The  was replaced with the timezone-aware .
+
+-   ****
+    -   **Importance**: A newly created file to house manually written documentation for the application's API endpoints.
+    -   **Changes**: This file was created as the first step in documenting the API.
 </code_architecture>
 
 <pending_tasks>
-- Update the frontend partner configuration form to make SSH password authentication the primary method, with SSH key being optional.
+- **Enhance API Documentation**: Continue the work on API documentation by updating  to add descriptive tags, summaries, and response descriptions to the FastAPI endpoints. This will enrich the auto-generated Swagger/OpenAPI documentation at the  endpoint.
 </pending_tasks>
 
 <current_work>
-The immediate work involved responding to the user's request to prioritize SSH username and password authentication over SSH private keys in partner configurations. The AI engineer has already confirmed that the backend  model () and the  () fully support both password and private key authentication, with a preference for password when both are provided.
+The most recent task was to create comprehensive API documentation for the application, as requested by the user in message 560.
 
-To align with the user's explicit request, the AI engineer has updated relevant backend scripts and documentation:
--   : Modified to prioritize password input.
--   : Updated to reflect the new priority.
--   : Documented the change.
--   : Created to detail SSH authentication methods.
--   ╔════════════════════════════════════════════════════════════╗
-║                                                            ║
-║  Quick Add Partner - SSH Password Authentication          ║
-║                                                            ║
-╚════════════════════════════════════════════════════════════╝
+The AI engineer's last actions were:
+1.  **Created a Markdown File**: A new file, , was successfully created to serve as a home for detailed, human-readable API documentation (Chat Message 562).
+2.  **Initiated Swagger UI Enhancements**: The engineer then began the process of improving the auto-generated Swagger/OpenAPI documentation. The last action was reading the  file (Chat Message 564) with the stated intent of updating the FastAPI application and its routes with more descriptive information (e.g., , , ) to make the interactive documentation at the  endpoint more useful and self-explanatory.
 
-This script will help you add a partner using SSH password.
-All credentials will be encrypted before storage.
-
-
-Database Configuration:
-
-
-SSH Configuration:
-
-
-
-═══════════════════════════════════════════════════════════
-Partner Configuration Summary:
-═══════════════════════════════════════════════════════════
-  Partner Name: 
-  Database: :3306/
-  SSH Tunnel: :22
-  SSH User: 
-  SSH Auth: Password
-  Concurrency Limit: 50
-═══════════════════════════════════════════════════════════
-
-Aborted.: Created as a quick start guide for adding partners with password authentication.
-
-The current focus is on the frontend. The engineer's last action was to identify the partner configuration component in the frontend codebase to implement the UI changes, making the password field primary and the SSH key optional.
-The backend is stable and configured to fetch real data from the external MySQL partner database (ApTask) using SSH tunneling with  and . The main JobTalk application uses a separate MongoDB instance.
+The work was paused immediately after reading  and before any edits were made to it for this purpose. The backend services were running successfully after the last restart.
 </current_work>
 
 <optional_next_step>
-Locate the frontend component responsible for partner configuration and update its form to prioritize SSH password input.
+Continue the current task by editing  to add descriptive metadata (tags, summaries, descriptions) to the FastAPI routes, thereby enhancing the auto-generated Swagger/OpenAPI documentation.
 </optional_next_step>

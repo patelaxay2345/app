@@ -3,7 +3,7 @@
 ## Base URL
 ```
 Production: https://your-domain.com/api
-Development: https://admin-metrics-5.preview.emergentagent.com/api
+Development: https://dash-jobtalk.preview.emergentagent.com/api
 ```
 
 ## Authentication

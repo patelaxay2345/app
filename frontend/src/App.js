@@ -86,6 +86,14 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/public-api-docs"
+            element={
+              <PrivateRoute>
+                <PublicApiDocs />
+              </PrivateRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
       <Toaster />

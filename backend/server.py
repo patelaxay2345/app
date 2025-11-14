@@ -1705,7 +1705,25 @@ async def get_all_partners_period_statistics(
         }
 
 # Health check
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="Health check",
+    description="""
+    Basic health check endpoint for monitoring and load balancers.
+    
+    **Authentication Required:** No
+    
+    **Returns:**
+    - status: "healthy"
+    
+    **Use Cases:**
+    - Kubernetes liveness/readiness probes
+    - Load balancer health checks
+    - Monitoring systems
+    - Service discovery
+    """
+)
 async def health_check():
     return {"status": "healthy"}
 

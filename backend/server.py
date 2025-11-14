@@ -547,7 +547,30 @@ async def test_connection(partner_id: str, current_user: User = Depends(get_curr
     result = await ssh_service.test_connection(partner)
     return result
 
-@api_router.get("/partners/{partner_id}/logs", response_model=List[ConnectionLog])
+@api_router.get(
+    "/partners/{partner_id}/logs",
+    response_model=List[ConnectionLog],
+    tags=["Partner Management"],
+    summary="Get connection logs",
+    description="""
+    Retrieve connection logs for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - partner_id: UUID of the partner
+    - limit: Maximum number of logs to return (default: 50)
+    
+    **Returns:**
+    - List of connection logs (most recent first)
+    - Each log contains timestamp, status, and error details
+    
+    **Use Cases:**
+    - Debug connection issues
+    - Monitor connection health
+    - Audit connection attempts
+    """
+)
 async def get_partner_logs(partner_id: str, limit: int = 50, current_user: User = Depends(get_current_user)):
     logs = await db.connection_logs.find({"partnerId": partner_id}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
     return logs

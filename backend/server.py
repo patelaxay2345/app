@@ -1924,6 +1924,7 @@ async def startup_event():
         {"settingKey": "criticalUtilizationThreshold", "settingValue": 30, "description": "Critical alert utilization threshold"},
         {"settingKey": "highQueuedMin", "settingValue": 100, "description": "High priority queued min"},
         {"settingKey": "highQueuedMax", "settingValue": 200, "description": "High priority queued max"},
+        {"settingKey": "publicApiAllowedDomains", "settingValue": "", "description": "Comma-separated list of allowed domains for public API CORS (e.g., https://example.com,https://another.com). Leave empty to allow all origins."},
     ]
     
     for setting in default_settings:

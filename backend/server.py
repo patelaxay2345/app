@@ -1258,7 +1258,33 @@ async def get_setting(key: str, current_user: User = Depends(get_current_user)):
     return SystemSetting(**setting)
 
 # ============= Partner Detail Routes =============
-@api_router.get("/partners/{partner_id}/metrics", response_model=DashboardSnapshot)
+@api_router.get(
+    "/partners/{partner_id}/metrics",
+    response_model=DashboardSnapshot,
+    tags=["Partner Details"],
+    summary="Get partner metrics",
+    description="""
+    Retrieve the latest metrics snapshot for a specific partner.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - Latest dashboard snapshot with all metrics
+    - Campaign counts (today, running)
+    - Call statistics (active, queued, completed, remaining)
+    - Voicemail and customer-ended counts
+    - Concurrency limit and utilization
+    - Alert level and message
+    - Data fetch timestamp and performance
+    
+    **Note:** Returns empty snapshot with zeros if no data available yet.
+    
+    **Use Cases:**
+    - Partner detail page
+    - Real-time monitoring
+    - Performance analysis
+    """
+)
 async def get_partner_metrics(partner_id: str, current_user: User = Depends(get_current_user)):
     snapshot = await db.dashboard_snapshots.find_one(
         {"partnerId": partner_id},

@@ -925,7 +925,21 @@ async def toggle_pause_non_priority(partner_id: str, toggle: dict, current_user:
             "syncError": str(e)
         }
 
-@api_router.put("/concurrency/{partner_id}")
+@api_router.put(
+    "/concurrency/{partner_id}",
+    tags=["Concurrency Management"],
+    summary="Update concurrency (alternative endpoint)",
+    description="""
+    Update call concurrency limit for a partner (alternative PUT endpoint).
+    
+    **Authentication Required:** Yes
+    
+    **Note:** This is an alternative to POST /partners/{partner_id}/concurrency.
+    Functionality is identical.
+    
+    See POST /partners/{partner_id}/concurrency for detailed documentation.
+    """
+)
 async def update_concurrency(partner_id: str, update: ConcurrencyUpdate, current_user: User = Depends(get_current_user)):
     result = await concurrency_service.update_concurrency(
         partner_id,

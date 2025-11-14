@@ -254,12 +254,38 @@ async def get_me(current_user: User = Depends(get_current_user)):
 async def logout(current_user: User = Depends(get_current_user)):
     return {"message": "Logged out successfully"}
 
-@api_router.post("/auth/change-password")
+@api_router.post(
+    "/auth/change-password",
+    tags=["Authentication"],
+    summary="Change password",
+    description="""
+    Change the current user's password.
+    
+    **Authentication Required:** Yes
+    
+    **Request Body:**
+    ```json
+    {
+        "currentPassword": "your_current_password",
+        "newPassword": "your_new_password"
+    }
+    ```
+    
+    **Process:**
+    1. Verifies current password
+    2. Hashes new password securely
+    3. Updates password in database
+    4. Updates user's updatedAt timestamp
+    
+    **Security:**
+    - Current password must be correct
+    - New password is hashed using bcrypt
+    """
+)
 async def change_password(
     password_change: dict,
     current_user: User = Depends(get_current_user)
 ):
-    """Change user password"""
     current_password = password_change.get('currentPassword')
     new_password = password_change.get('newPassword')
     

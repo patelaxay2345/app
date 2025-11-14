@@ -722,6 +722,183 @@ async def get_period_statistics(
             }
         }
 
+@api_router.get("/all-partners/period-stats")
+async def get_all_partners_period_statistics(
+    start_date: str,
+    end_date: str,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get aggregated statistics across ALL partners for a given time period
+    
+    Parameters:
+    - start_date: Start date in YYYY-MM-DD format
+    - end_date: End date in YYYY-MM-DD format
+    
+    Returns:
+    - Aggregated total calls and submittals across all partners
+    - Per-partner breakdown
+    - Overall totals and status breakdowns
+    """
+    try:
+        # Get all active partners
+        partners = await db.partner_configs.find({"isActive": True}, {"_id": 0}).to_list(None)
+        
+        if not partners:
+            return {
+                "success": True,
+                "period": {
+                    "startDate": start_date,
+                    "endDate": end_date
+                },
+                "totalPartners": 0,
+                "aggregated": {
+                    "calls": {"total": 0, "byStatus": {}},
+                    "submittals": {"total": 0, "byStatus": {}}
+                },
+                "partnerBreakdown": []
+            }
+        
+        partner_breakdown = []
+        total_calls = 0
+        total_submittals = 0
+        aggregated_calls_by_status = {}
+        aggregated_submittals_by_status = {}
+        
+        # Fetch data for each partner
+        for partner_data in partners:
+            partner = PartnerConfig(**partner_data)
+            
+            try:
+                queries = [
+                    # Total calls
+                    {
+                        'query': """
+                            SELECT COUNT(*) as total_calls
+                            FROM calls
+                            WHERE DATE(createdAt) BETWEEN %s AND %s
+                        """,
+                        'params': (start_date, end_date)
+                    },
+                    # Calls by status
+                    {
+                        'query': """
+                            SELECT status, COUNT(*) as count
+                            FROM calls
+                            WHERE DATE(createdAt) BETWEEN %s AND %s
+                            GROUP BY status
+                        """,
+                        'params': (start_date, end_date)
+                    },
+                    # Total submittals
+                    {
+                        'query': """
+                            SELECT COUNT(*) as total_submittals
+                            FROM ats_submittals
+                            WHERE DATE(createdAt) BETWEEN %s AND %s
+                        """,
+                        'params': (start_date, end_date)
+                    },
+                    # Submittals by status
+                    {
+                        'query': """
+                            SELECT status, COUNT(*) as count
+                            FROM ats_submittals
+                            WHERE DATE(createdAt) BETWEEN %s AND %s
+                            GROUP BY status
+                        """,
+                        'params': (start_date, end_date)
+                    }
+                ]
+                
+                results = await ssh_service.execute_batch_queries(partner, queries)
+                
+                # Extract partner data
+                partner_calls = results[0][0]['total_calls'] if results[0] and len(results[0]) > 0 else 0
+                partner_submittals = results[2][0]['total_submittals'] if results[2] and len(results[2]) > 0 else 0
+                
+                calls_by_status = {}
+                if results[1] and len(results[1]) > 0:
+                    for row in results[1]:
+                        status = row['status']
+                        count = row['count']
+                        calls_by_status[status] = count
+                        aggregated_calls_by_status[status] = aggregated_calls_by_status.get(status, 0) + count
+                
+                submittals_by_status = {}
+                if results[3] and len(results[3]) > 0:
+                    for row in results[3]:
+                        status = row['status']
+                        count = row['count']
+                        submittals_by_status[status] = count
+                        aggregated_submittals_by_status[status] = aggregated_submittals_by_status.get(status, 0) + count
+                
+                # Add to totals
+                total_calls += partner_calls
+                total_submittals += partner_submittals
+                
+                # Add partner breakdown
+                partner_breakdown.append({
+                    "partnerId": partner.id,
+                    "partnerName": partner.partnerName,
+                    "calls": {
+                        "total": partner_calls,
+                        "byStatus": calls_by_status
+                    },
+                    "submittals": {
+                        "total": partner_submittals,
+                        "byStatus": submittals_by_status
+                    }
+                })
+                
+            except Exception as e:
+                logger.error(f"Error fetching data for partner {partner.partnerName}: {str(e)}")
+                # Add partner with error status
+                partner_breakdown.append({
+                    "partnerId": partner.id,
+                    "partnerName": partner.partnerName,
+                    "error": str(e),
+                    "calls": {"total": 0, "byStatus": {}},
+                    "submittals": {"total": 0, "byStatus": {}}
+                })
+        
+        return {
+            "success": True,
+            "period": {
+                "startDate": start_date,
+                "endDate": end_date
+            },
+            "totalPartners": len(partners),
+            "aggregated": {
+                "calls": {
+                    "total": total_calls,
+                    "byStatus": aggregated_calls_by_status
+                },
+                "submittals": {
+                    "total": total_submittals,
+                    "byStatus": aggregated_submittals_by_status
+                }
+            },
+            "partnerBreakdown": partner_breakdown
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching all partners period statistics: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "period": {
+                "startDate": start_date,
+                "endDate": end_date
+            },
+            "totalPartners": 0,
+            "aggregated": {
+                "calls": {"total": 0, "byStatus": {}},
+                "submittals": {"total": 0, "byStatus": {}}
+            },
+            "partnerBreakdown": []
+        }
+
 # Health check
 @app.get("/health")
 async def health_check():

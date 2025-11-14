@@ -396,7 +396,27 @@ async def create_partner(partner_input: PartnerConfigCreate, current_user: User 
     await db.partner_configs.insert_one(partner_dict)
     return partner
 
-@api_router.get("/partners/{partner_id}", response_model=PartnerConfig)
+@api_router.get(
+    "/partners/{partner_id}",
+    response_model=PartnerConfig,
+    tags=["Partner Management"],
+    summary="Get partner by ID",
+    description="""
+    Retrieve detailed configuration for a specific partner.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - partner_id: UUID of the partner
+    
+    **Returns:**
+    - Complete partner configuration
+    - Encrypted sensitive fields
+    
+    **Errors:**
+    - 404: Partner not found
+    """
+)
 async def get_partner(partner_id: str, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

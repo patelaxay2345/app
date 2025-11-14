@@ -1704,6 +1704,162 @@ async def get_all_partners_period_statistics(
             "partnerBreakdown": []
         }
 
+# ============= Public API Routes =============
+@api_router.get(
+    "/public/stats",
+    tags=["Public API"],
+    summary="Get public statistics (No Authentication Required)",
+    description="""
+    Public endpoint for displaying call and submittal statistics on external websites.
+    
+    **Authentication Required:** No
+    
+    **Query Parameters:**
+    - partner_id (optional): Specific partner UUID. If omitted, returns aggregated stats for all partners
+    - start_date (optional): Start date in YYYY-MM-DD format. Default: 30 days ago
+    - end_date (optional): End date in YYYY-MM-DD format. Default: today
+    
+    **Examples:**
+    ```
+    # All partners, last 30 days (default)
+    GET /api/public/stats
+    
+    # All partners, custom date range
+    GET /api/public/stats?start_date=2024-01-01&end_date=2024-01-31
+    
+    # Specific partner, last 30 days
+    GET /api/public/stats?partner_id=abc-123
+    
+    # Specific partner, custom date range
+    GET /api/public/stats?partner_id=abc-123&start_date=2024-01-01&end_date=2024-01-31
+    ```
+    
+    **Response Format:**
+    ```json
+    {
+        "calls": 1234,
+        "submittals": 567,
+        "period": {
+            "startDate": "2024-10-15",
+            "endDate": "2024-11-14"
+        }
+    }
+    ```
+    
+    **CORS:**
+    - Allowed domains can be configured via System Settings
+    - Setting key: "publicApiAllowedDomains"
+    - Format: Comma-separated list of domains (e.g., "https://example.com,https://another.com")
+    
+    **Use Cases:**
+    - Display statistics on company website
+    - Public dashboard widgets
+    - Marketing pages
+    - Client portals
+    """
+)
+async def get_public_stats(
+    partner_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Public endpoint for statistics - no authentication required
+    """
+    try:
+        # Calculate default dates (last 30 days)
+        if not end_date:
+            end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        if not start_date:
+            start_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d')
+        
+        total_calls = 0
+        total_submittals = 0
+        
+        # Single partner query
+        if partner_id:
+            partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+            if not partner_data:
+                raise HTTPException(status_code=404, detail="Partner not found")
+            
+            partner = PartnerConfig(**partner_data)
+            
+            queries = [
+                {
+                    'query': """
+                        SELECT COUNT(*) as total_calls
+                        FROM calls
+                        WHERE DATE(createdAt) BETWEEN %s AND %s
+                    """,
+                    'params': (start_date, end_date)
+                },
+                {
+                    'query': """
+                        SELECT COUNT(*) as total_submittals
+                        FROM ats_submittals
+                        WHERE DATE(createdAt) BETWEEN %s AND %s
+                    """,
+                    'params': (start_date, end_date)
+                }
+            ]
+            
+            results = await ssh_service.execute_batch_queries(partner, queries)
+            total_calls = results[0][0]['total_calls'] if results[0] and len(results[0]) > 0 else 0
+            total_submittals = results[1][0]['total_submittals'] if results[1] and len(results[1]) > 0 else 0
+        
+        # All partners aggregated
+        else:
+            partners = await db.partner_configs.find({"isActive": True}, {"_id": 0}).to_list(None)
+            
+            for partner_data in partners:
+                partner = PartnerConfig(**partner_data)
+                
+                try:
+                    queries = [
+                        {
+                            'query': """
+                                SELECT COUNT(*) as total_calls
+                                FROM calls
+                                WHERE DATE(createdAt) BETWEEN %s AND %s
+                            """,
+                            'params': (start_date, end_date)
+                        },
+                        {
+                            'query': """
+                                SELECT COUNT(*) as total_submittals
+                                FROM ats_submittals
+                                WHERE DATE(createdAt) BETWEEN %s AND %s
+                            """,
+                            'params': (start_date, end_date)
+                        }
+                    ]
+                    
+                    results = await ssh_service.execute_batch_queries(partner, queries)
+                    partner_calls = results[0][0]['total_calls'] if results[0] and len(results[0]) > 0 else 0
+                    partner_submittals = results[1][0]['total_submittals'] if results[1] and len(results[1]) > 0 else 0
+                    
+                    total_calls += partner_calls
+                    total_submittals += partner_submittals
+                    
+                except Exception as e:
+                    logger.error(f"Error fetching public stats for partner {partner.partnerName}: {str(e)}")
+                    continue
+        
+        return {
+            "calls": total_calls,
+            "submittals": total_submittals,
+            "period": {
+                "startDate": start_date,
+                "endDate": end_date
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in public stats endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching statistics")
+
 # Health check
 @app.get(
     "/health",

@@ -1502,24 +1502,49 @@ async def get_period_statistics(
             }
         }
 
-@api_router.get("/all-partners/period-stats")
+@api_router.get(
+    "/all-partners/period-stats",
+    tags=["Statistics & Reporting"],
+    summary="Get all partners period statistics",
+    description="""
+    Retrieve aggregated call and submittal statistics across all active partners.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - start_date: Start date in YYYY-MM-DD format
+    - end_date: End date in YYYY-MM-DD format
+    
+    **Returns:**
+    - **period**: Time range queried
+    - **totalPartners**: Number of active partners included
+    - **aggregated**: Combined totals across all partners
+      - calls: Total calls and status breakdown
+      - submittals: Total submittals and status breakdown
+    - **partnerBreakdown**: Individual partner statistics
+      - Each partner includes partnerId, partnerName, calls, and submittals
+      - Partners with errors included with error message
+    
+    **Performance:**
+    - Queries multiple partner databases in parallel
+    - Uses SSH batch queries for efficiency
+    - Continues even if some partners fail
+    
+    **Use Cases:**
+    - System-wide reporting
+    - Executive dashboards
+    - Cross-partner analytics
+    - Capacity planning
+    - Multi-tenant billing
+    
+    **Note:** Failed partners are included in breakdown with error details.
+    """
+)
 async def get_all_partners_period_statistics(
     start_date: str,
     end_date: str,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get aggregated statistics across ALL partners for a given time period
-    
-    Parameters:
-    - start_date: Start date in YYYY-MM-DD format
-    - end_date: End date in YYYY-MM-DD format
-    
-    Returns:
-    - Aggregated total calls and submittals across all partners
-    - Per-partner breakdown
-    - Overall totals and status breakdowns
-    """
     try:
         # Get all active partners
         partners = await db.partner_configs.find({"isActive": True}, {"_id": 0}).to_list(None)

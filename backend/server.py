@@ -10,6 +10,7 @@ from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 import jwt
 from passlib.context import CryptContext
+import uuid
 
 from models import *
 from services.encryption import EncryptionService

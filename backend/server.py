@@ -511,7 +511,33 @@ async def delete_partner(partner_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=404, detail="Partner not found")
     return {"message": "Partner deleted successfully"}
 
-@api_router.post("/partners/{partner_id}/test", response_model=TestConnectionResponse)
+@api_router.post(
+    "/partners/{partner_id}/test",
+    response_model=TestConnectionResponse,
+    tags=["Partner Management"],
+    summary="Test partner connection",
+    description="""
+    Test SSH tunnel and database connection for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Process:**
+    1. Establishes SSH tunnel (if enabled)
+    2. Connects to partner's MySQL database
+    3. Executes simple test query
+    4. Records result in connection logs
+    
+    **Returns:**
+    - Connection status (success/failure)
+    - Response time in milliseconds
+    - Error message (if failed)
+    
+    **Use Cases:**
+    - Validate new partner configuration
+    - Troubleshoot connection issues
+    - Verify SSH credentials
+    """
+)
 async def test_connection(partner_id: str, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

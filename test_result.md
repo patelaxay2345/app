@@ -103,10 +103,8 @@
 #====================================================================================================
 
 user_problem_statement: |
-  User reported two issues with partner configuration:
-  1. SSH key saving bug - when editing a partner, the SSH key shows as encrypted string and doesn't work after re-saving
-  2. Form validation - need to require at least one of SSH password OR SSH private key (not both required)
-  3. Add SSH password field to the form (it was missing)
+  Enhance API documentation by adding comprehensive tags, summaries, and descriptions to all FastAPI endpoints.
+  Goal: Make the auto-generated Swagger/OpenAPI documentation more user-friendly and self-documenting.
 
 backend:
   - task: "Encrypt SSH passwords in backend"

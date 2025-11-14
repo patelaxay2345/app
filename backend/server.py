@@ -725,7 +725,33 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
         lastUpdated=datetime.now(timezone.utc)
     )
 
-@api_router.get("/dashboard/partners", response_model=List[PartnerDashboardData])
+@api_router.get(
+    "/dashboard/partners",
+    response_model=List[PartnerDashboardData],
+    tags=["Dashboard"],
+    summary="Get partner dashboard data",
+    description="""
+    Retrieve dashboard data for all partners with their latest metrics.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - List of partners with their latest snapshot data
+    - Partner configuration details
+    - Current metrics (calls, campaigns, utilization)
+    - Alert levels and messages
+    
+    **Data Structure:**
+    Each entry contains:
+    - partner: Complete partner configuration
+    - snapshot: Latest metrics snapshot (null if no data yet)
+    
+    **Use Cases:**
+    - Display partner list on dashboard
+    - Show per-partner metrics
+    - Monitor individual partner health
+    """
+)
 async def get_dashboard_partners(current_user: User = Depends(get_current_user)):
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)
     

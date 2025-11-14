@@ -1312,7 +1312,28 @@ async def get_partner_metrics(partner_id: str, current_user: User = Depends(get_
         )
     return DashboardSnapshot(**snapshot)
 
-@api_router.get("/partners/{partner_id}/campaigns")
+@api_router.get(
+    "/partners/{partner_id}/campaigns",
+    tags=["Partner Details"],
+    summary="Get partner campaigns",
+    description="""
+    Retrieve paginated list of campaigns for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - partner_id: UUID of the partner
+    - page: Page number (default: 1)
+    - pageSize: Items per page (default: 20)
+    
+    **Returns:**
+    - List of campaigns
+    - Total count
+    - Pagination info
+    
+    **Note:** Currently returns placeholder data. Full implementation queries partner's MySQL database.
+    """
+)
 async def get_partner_campaigns(partner_id: str, page: int = 1, pageSize: int = 20, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

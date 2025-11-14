@@ -423,7 +423,33 @@ async def get_partner(partner_id: str, current_user: User = Depends(get_current_
         raise HTTPException(status_code=404, detail="Partner not found")
     return PartnerConfig(**partner_data)
 
-@api_router.put("/partners/{partner_id}", response_model=PartnerConfig)
+@api_router.put(
+    "/partners/{partner_id}",
+    response_model=PartnerConfig,
+    tags=["Partner Management"],
+    summary="Update partner",
+    description="""
+    Update an existing partner's configuration.
+    
+    **Authentication Required:** Yes
+    
+    **Special Handling:**
+    - Partial updates supported (only send fields to update)
+    - SSH credentials are merged, not replaced
+    - Empty SSH fields preserve existing encrypted values
+    - Prevents double encryption of credentials
+    
+    **Security:**
+    - New credentials are encrypted before storage
+    - Existing encrypted credentials preserved during partial updates
+    
+    **Returns:**
+    - Updated partner configuration
+    
+    **Errors:**
+    - 404: Partner not found
+    """
+)
 async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

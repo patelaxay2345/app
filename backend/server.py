@@ -332,7 +332,32 @@ async def get_partners(current_user: User = Depends(get_current_user)):
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)
     return partners
 
-@api_router.post("/partners", response_model=PartnerConfig)
+@api_router.post(
+    "/partners",
+    response_model=PartnerConfig,
+    tags=["Partner Management"],
+    summary="Create new partner",
+    description="""
+    Create a new partner configuration with database and SSH settings.
+    
+    **Authentication Required:** Yes
+    
+    **Validations:**
+    - Partner name must be unique
+    - If SSH is enabled, must provide either password OR private key
+    - Database connection details are required
+    
+    **Security:**
+    - Database password is encrypted before storage
+    - SSH credentials (password, private key, passphrase) are encrypted
+    - All sensitive data uses AES-256-CBC encryption
+    
+    **Returns:**
+    - Created partner configuration
+    - Generated UUID
+    - Timestamps (createdAt, updatedAt)
+    """
+)
 async def create_partner(partner_input: PartnerConfigCreate, current_user: User = Depends(get_current_user)):
     # Check if partner name exists
     existing = await db.partner_configs.find_one({"partnerName": partner_input.partnerName}, {"_id": 0})

@@ -1348,26 +1348,49 @@ async def get_partner_campaigns(partner_id: str, page: int = 1, pageSize: int = 
         "pageSize": pageSize
     }
 
-@api_router.get("/partners/{partner_id}/period-stats")
+@api_router.get(
+    "/partners/{partner_id}/period-stats",
+    tags=["Statistics & Reporting"],
+    summary="Get partner period statistics",
+    description="""
+    Retrieve call and submittal statistics for a specific date range.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - partner_id: UUID of the partner
+    - start_date: Start date in YYYY-MM-DD format
+    - end_date: End date in YYYY-MM-DD format
+    
+    **Returns:**
+    - **period**: Time range queried
+    - **calls**: 
+      - total: Total call count in period
+      - byStatus: Breakdown by call status (QUEUED, ACTIVE, ENDED, etc.)
+    - **submittals**:
+      - total: Total ATS submittal count
+      - byStatus: Breakdown by submittal status
+    
+    **Data Source:**
+    - Queries partner's MySQL database directly via SSH
+    - Tables: calls, ats_submittals
+    - Uses batch query execution for efficiency
+    
+    **Use Cases:**
+    - Historical reporting
+    - Performance analysis
+    - Period-over-period comparison
+    - Billing and capacity planning
+    
+    **Note:** Returns empty data with success:false if query fails.
+    """
+)
 async def get_period_statistics(
     partner_id: str,
     start_date: str,
     end_date: str,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get total calls and submitted candidates for a given time period
-    
-    Parameters:
-    - start_date: Start date in YYYY-MM-DD format
-    - end_date: End date in YYYY-MM-DD format
-    
-    Returns:
-    - totalCalls: Total number of calls in the period
-    - totalSubmittedCandidates: Total number of submitted candidates in the period
-    - callsByStatus: Breakdown of calls by status
-    - period: The queried time period
-    """
     # Get partner configuration
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

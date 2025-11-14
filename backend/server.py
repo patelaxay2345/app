@@ -625,7 +625,29 @@ async def get_concurrency_history(partner_id: str, limit: int = 20, current_user
     history = await db.concurrency_history.find({"partnerId": partner_id}, {"_id": 0}).sort("changedAt", -1).limit(limit).to_list(limit)
     return history
 
-@api_router.post("/partners/{partner_id}/force-sync")
+@api_router.post(
+    "/partners/{partner_id}/force-sync",
+    tags=["Partner Management"],
+    summary="Force data sync",
+    description="""
+    Manually trigger immediate data fetch for a partner.
+    
+    **Authentication Required:** Yes
+    
+    **Process:**
+    1. Bypasses automatic sync schedule
+    2. Connects to partner database
+    3. Fetches current metrics
+    4. Updates dashboard snapshot
+    
+    **Use Cases:**
+    - Get latest data immediately
+    - Verify recent changes
+    - Troubleshoot sync issues
+    
+    **Note:** Respects connection timeout settings
+    """
+)
 async def force_sync(partner_id: str, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:

@@ -742,6 +742,13 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
             await self.test_edit_partner_update_ssh_password_only()
             await self.test_backend_encryption_verification()
             
+            # Public API Tests
+            await self.test_public_stats_default_behavior()
+            await self.test_public_stats_custom_date_range()
+            await self.test_public_stats_no_authentication()
+            await self.test_public_stats_error_handling()
+            await self.test_public_stats_cors_headers()
+            
         finally:
             await self.cleanup()
         

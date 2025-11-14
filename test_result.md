@@ -103,8 +103,12 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Enhance API documentation by adding comprehensive tags, summaries, and descriptions to all FastAPI endpoints.
-  Goal: Make the auto-generated Swagger/OpenAPI documentation more user-friendly and self-documenting.
+  Create a public API endpoint for displaying call and submittal statistics on external websites.
+  Requirements:
+  1. Support both all-partners aggregated and specific partner queries
+  2. Custom date range via query params (default: last 30 days)
+  3. Return only total calls and submittals (simple format)
+  4. CORS configuration manageable via admin settings for multiple domains
 
 backend:
   - task: "Add comprehensive API documentation tags and descriptions"

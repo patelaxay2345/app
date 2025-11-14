@@ -341,6 +341,58 @@ function Settings() {
           </div>
         </div>
 
+        {/* Public API CORS Configuration */}
+        <div className="glass rounded-xl border border-white/10 p-6">
+          <h3 className="text-xl font-semibold text-white mb-6">Public API CORS Configuration</h3>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-base">Allowed Domains for Public API</Label>
+              <p className="text-sm text-gray-400 mt-1">
+                Configure which domains can access the public statistics API endpoint (/api/public/stats).
+                Leave empty to allow all origins.
+              </p>
+              <Input
+                value={settings.publicApiAllowedDomains || ''}
+                onChange={(e) => updateSetting('publicApiAllowedDomains', e.target.value)}
+                placeholder="https://example.com,https://www.example.com,https://another-site.com"
+                className="bg-black/40 border-white/10 text-white"
+              />
+              <p className="text-xs text-gray-400">
+                Format: Comma-separated list of domains with protocol (e.g., https://example.com)
+              </p>
+            </div>
+
+            <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
+              <h4 className="text-sm font-semibold text-blue-400 mb-2">ℹ️ How to use:</h4>
+              <ul className="text-xs text-gray-300 space-y-1 list-disc list-inside">
+                <li><strong>Empty value:</strong> Allows requests from any domain (less secure)</li>
+                <li><strong>With domains:</strong> Only listed domains can access the public API</li>
+                <li><strong>Example:</strong> https://mywebsite.com,https://www.mywebsite.com</li>
+              </ul>
+            </div>
+
+            <div className="p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+              <h4 className="text-sm font-semibold text-green-400 mb-2">📊 Public API Endpoint:</h4>
+              <div className="space-y-2">
+                <code className="text-xs text-gray-300 block bg-black/40 p-2 rounded">
+                  GET /api/public/stats
+                </code>
+                <p className="text-xs text-gray-400">
+                  This endpoint provides call and submittal statistics for external websites. 
+                  No authentication required.
+                </p>
+                <a 
+                  href="/app/PUBLIC_API_DOCUMENTATION.md" 
+                  target="_blank"
+                  className="text-xs text-blue-400 hover:underline inline-block"
+                >
+                  View complete documentation →
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="flex justify-end">
           <Button
             onClick={handleSave}

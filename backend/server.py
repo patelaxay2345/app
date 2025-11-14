@@ -174,7 +174,31 @@ async def register(user_input: UserCreate):
     await db.users.insert_one(user_dict)
     return user
 
-@api_router.post("/auth/login", response_model=Token)
+@api_router.post(
+    "/auth/login",
+    response_model=Token,
+    tags=["Authentication"],
+    summary="User login",
+    description="""
+    Authenticate user and obtain JWT access token.
+    
+    **Process:**
+    1. Validates username and password
+    2. Updates user's last login timestamp
+    3. Generates JWT token (valid for 8 hours by default)
+    
+    **Returns:**
+    - Access token (JWT)
+    - Token type ("bearer")
+    - User object
+    
+    **Usage:**
+    Use the returned token in subsequent requests:
+    ```
+    Authorization: Bearer <access_token>
+    ```
+    """
+)
 async def login(credentials: UserLogin):
     user_data = await db.users.find_one({"username": credentials.username}, {"_id": 0})
     if not user_data:

@@ -39,7 +39,45 @@ JWT_EXPIRY_HOURS = int(os.environ.get('JWT_EXPIRY_HOURS', 8))
 security = HTTPBearer()
 
 # Create the main app without a prefix
-app = FastAPI(title="JobTalk Admin Dashboard")
+app = FastAPI(
+    title="JobTalk Admin Dashboard API",
+    description="""
+    ## JobTalk Admin Dashboard API
+    
+    Complete API for managing partners, monitoring call campaigns, and tracking metrics.
+    
+    ### Features:
+    * **Partner Management** - Create, update, and manage partner configurations
+    * **Real-time Metrics** - Monitor campaigns, calls, and submittals
+    * **SSH Tunneling** - Secure connections to partner databases
+    * **Period Statistics** - Analyze data over custom date ranges
+    * **Concurrency Control** - Manage call concurrency limits
+    * **Authentication** - JWT-based secure authentication
+    
+    ### Authentication:
+    All endpoints require JWT authentication. Obtain a token by calling `/api/auth/login`.
+    
+    Add the token to requests using the Authorization header:
+    ```
+    Authorization: Bearer <your_token>
+    ```
+    
+    ### Documentation:
+    - **Swagger UI**: Available at `/docs` (this page)
+    - **ReDoc**: Available at `/redoc`
+    - **Markdown Docs**: See `/app/API_DOCUMENTATION.md`
+    """,
+    version="1.0.0",
+    contact={
+        "name": "JobTalk Admin Support",
+        "email": "support@jobtalk.com"
+    },
+    license_info={
+        "name": "Proprietary"
+    },
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")

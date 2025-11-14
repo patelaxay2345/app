@@ -805,8 +805,15 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
 
 async def main():
     """Main test runner"""
+    import sys
+    
     tester = BackendTester()
-    await tester.run_all_tests()
+    
+    # Check if we should run only public API tests
+    if len(sys.argv) > 1 and sys.argv[1] == "--public-api-only":
+        await tester.run_public_api_tests_only()
+    else:
+        await tester.run_all_tests()
 
 if __name__ == "__main__":
     asyncio.run(main())

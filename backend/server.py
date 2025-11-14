@@ -575,9 +575,25 @@ async def get_partner_logs(partner_id: str, limit: int = 50, current_user: User 
     logs = await db.connection_logs.find({"partnerId": partner_id}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
     return logs
 
-@api_router.delete("/partners/{partner_id}/logs")
+@api_router.delete(
+    "/partners/{partner_id}/logs",
+    tags=["Partner Management"],
+    summary="Clear connection logs",
+    description="""
+    Delete all connection logs for a specific partner.
+    
+    **Authentication Required:** Yes
+    
+    **Use Cases:**
+    - Clean up old logs
+    - Free database space
+    - Reset logging history
+    
+    **Returns:**
+    - Count of deleted logs
+    """
+)
 async def clear_partner_logs(partner_id: str, current_user: User = Depends(get_current_user)):
-    """Clear all connection logs for a partner"""
     result = await db.connection_logs.delete_many({"partnerId": partner_id})
     return {"message": f"Deleted {result.deleted_count} connection logs"}
 

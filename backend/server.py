@@ -1156,7 +1156,29 @@ async def dismiss_alert(alert_id: str, hours: int = 24, current_user: User = Dep
     return {"message": "Alert dismissed"}
 
 # ============= Settings Routes =============
-@api_router.get("/settings", response_model=List[SystemSetting])
+@api_router.get(
+    "/settings",
+    response_model=List[SystemSetting],
+    tags=["System Settings"],
+    summary="Get all system settings",
+    description="""
+    Retrieve all system configuration settings.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - List of all system settings with keys, values, and descriptions
+    
+    **Common Settings:**
+    - refreshInterval: Dashboard auto-refresh interval (seconds)
+    - autoRefreshEnabled: Enable/disable auto-refresh
+    - queryTimeout: Database query timeout (seconds)
+    - connectionTimeout: SSH connection timeout (seconds)
+    - concurrentPartnerLimit: Max parallel partner queries
+    - criticalQueuedThreshold: Alert threshold for queued calls
+    - criticalUtilizationThreshold: Alert threshold for utilization %
+    """
+)
 async def get_settings(current_user: User = Depends(get_current_user)):
     settings = await db.system_settings.find({}, {"_id": 0}).to_list(1000)
     return settings

@@ -1887,6 +1887,63 @@ async def health_check():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Custom CORS middleware that checks settings for public API
+@app.middleware("http")
+async def dynamic_cors_middleware(request, call_next):
+    """
+    Custom CORS middleware that dynamically checks allowed domains for public API
+    """
+    # Get the origin from request headers
+    origin = request.headers.get("origin")
+    
+    # Process the request
+    response = await call_next(request)
+    
+    # Check if this is a public API endpoint
+    if request.url.path.startswith("/api/public/"):
+        # Get allowed domains from settings
+        allowed_domains_setting = await db.system_settings.find_one(
+            {"settingKey": "publicApiAllowedDomains"}, 
+            {"_id": 0}
+        )
+        
+        if allowed_domains_setting:
+            allowed_domains_str = allowed_domains_setting.get('settingValue', '')
+            
+            # If empty, allow all origins
+            if not allowed_domains_str or allowed_domains_str.strip() == '':
+                response.headers["Access-Control-Allow-Origin"] = origin or "*"
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "*"
+                response.headers["Access-Control-Allow-Headers"] = "*"
+            else:
+                # Parse comma-separated domains
+                allowed_domains = [d.strip() for d in allowed_domains_str.split(',') if d.strip()]
+                
+                # Check if origin is in allowed list
+                if origin and origin in allowed_domains:
+                    response.headers["Access-Control-Allow-Origin"] = origin
+                    response.headers["Access-Control-Allow-Credentials"] = "true"
+                    response.headers["Access-Control-Allow-Methods"] = "*"
+                    response.headers["Access-Control-Allow-Headers"] = "*"
+        else:
+            # If setting doesn't exist, allow all
+            response.headers["Access-Control-Allow-Origin"] = origin or "*"
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+    else:
+        # For non-public endpoints, use standard CORS configuration
+        allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
+        if origin and (origin in allowed_origins or '*' in allowed_origins):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    return response
+
+# Add standard CORS middleware as fallback
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,

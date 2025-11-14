@@ -309,7 +309,25 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 # ============= Partner Management Routes =============
-@api_router.get("/partners", response_model=List[PartnerConfig])
+@api_router.get(
+    "/partners",
+    response_model=List[PartnerConfig],
+    tags=["Partner Management"],
+    summary="Get all partners",
+    description="""
+    Retrieve a list of all partner configurations.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - List of all partners with their configurations
+    - Includes database connection details
+    - SSH configuration (credentials are encrypted)
+    - Active/inactive status
+    
+    **Note:** Sensitive fields (passwords, SSH keys) are returned encrypted.
+    """
+)
 async def get_partners(current_user: User = Depends(get_current_user)):
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)
     return partners

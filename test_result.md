@@ -147,105 +147,49 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      Implementation completed for SSH password authentication and double encryption bug fix.
+      **API DOCUMENTATION ENHANCEMENT COMPLETED** ✅
       
-      **Backend Changes:**
-      - Added SSH password encryption in create_partner endpoint
-      - Added SSH password encryption in update_partner endpoint
-      - Update logic only encrypts fields when they are provided (no double encryption)
+      **Task:** Enhanced Swagger/OpenAPI documentation for all API endpoints
       
-      **Frontend Changes:**
-      - Added SSH Password field (primary authentication method)
-      - SSH Private Key now marked as "(optional)"
-      - Added validation: at least one of password OR privateKey required when SSH is enabled
-      - Fixed double encryption bug: sensitive fields cleared when editing, only sent to backend if user enters new values
-      - Added helper text for all SSH fields
-      - Proper placeholders for edit mode
+      **Implementation Details:**
       
-      **Testing Needed:**
-      1. Create partner with SSH password only
-      2. Create partner with SSH private key only
-      3. Try to create partner with SSH enabled but no password/key (should show validation error)
-      4. Edit existing partner and verify encrypted credentials don't show
-      5. Edit partner and update only SSH password (verify key remains intact)
-      6. Edit partner and update only SSH key (verify password remains intact)
-      7. Test connection with password authentication
-      8. Test connection with key authentication
+      **1. Documentation Structure:**
+      - Organized 34 endpoints into 9 logical groups using tags
+      - Added comprehensive summaries and descriptions to every endpoint
+      - Included authentication requirements, parameters, and use cases
+      - Provided request/response examples where applicable
       
-      Please test all scenarios thoroughly, especially the edit flow and credential updates.
-  
-  - agent: "testing"
-    message: |
-      **BACKEND TESTING COMPLETED - CRITICAL ISSUES FOUND**
+      **2. Endpoint Categories:**
+      - **Authentication** (5 endpoints): Login, register, logout, password management
+      - **Partner Management** (10 endpoints): CRUD operations, testing, logs, history
+      - **Dashboard** (3 endpoints): Overview, partner data, refresh
+      - **Concurrency Management** (5 endpoints): Update limits, bulk operations, suggestions
+      - **Alerts** (3 endpoints): List, summary, dismiss
+      - **System Settings** (3 endpoints): Get, update, retrieve specific settings
+      - **Partner Details** (3 endpoints): Metrics, campaigns, period statistics
+      - **Statistics & Reporting** (2 endpoints): Period stats for partner and all partners
+      - **System** (1 endpoint): Health check
       
-      **✅ WORKING CORRECTLY:**
-      - SSH password encryption in database ✅
-      - SSH private key encryption in database ✅
-      - SSH passphrase encryption in database ✅
-      - Partner creation with SSH password only ✅
-      - Partner creation with SSH private key only ✅
-      - No double encryption during basic updates ✅
-      - All existing SSH credentials properly encrypted in database ✅
+      **3. Documentation Features Added:**
+      - Clear descriptions of what each endpoint does
+      - Authentication requirements
+      - Request body formats with JSON examples
+      - Return value descriptions
+      - Common use cases
+      - Process flows (step-by-step)
+      - Security notes where applicable
+      - Error handling information
+      - Performance considerations
       
-      **❌ CRITICAL ISSUES IDENTIFIED:**
+      **4. Verification:**
+      - All 34 endpoints have descriptions ✅
+      - All 9 tags properly categorized ✅
+      - OpenAPI JSON validates correctly ✅
+      - Swagger UI metadata enhanced ✅
       
-      1. **BACKEND VALIDATION MISSING** (High Priority)
-         - Backend allows creation of partners with SSH enabled but no credentials
-         - Frontend has validation, but backend bypasses it
-         - Security risk: Invalid SSH configs can be stored
-         - Location: /app/backend/server.py create_partner endpoint (line 156)
+      **Access:**
+      - Swagger UI: http://localhost:8001/docs (backend internal)
+      - OpenAPI JSON: http://localhost:8001/openapi.json
+      - ReDoc: http://localhost:8001/redoc
       
-      2. **SSH UPDATE BUG** (High Priority)
-         - When updating SSH config partially, missing fields are set to None/null
-         - Original encrypted privateKey and passphrase are lost during password-only updates
-         - This breaks the "update only password, keep key intact" requirement
-         - Location: /app/backend/server.py update_partner endpoint (line 191)
-         - Root cause: sshConfig object replacement instead of field-level merging
-      
-      **IMPACT:**
-      - Partners can be created with invalid SSH configurations
-      - Existing SSH credentials are lost during partial updates
-      - Users cannot safely update just SSH password without losing private key
-      
-      **RECOMMENDATION:**
-      Main agent must fix these backend validation and update logic issues before deployment.
-  
-  - agent: "testing"
-    message: |
-      **SSH AUTHENTICATION FIXES RETESTING COMPLETED - ALL ISSUES RESOLVED** ✅
-      
-      **COMPREHENSIVE TESTING RESULTS:**
-      
-      **✅ BACKEND VALIDATION FIXED:**
-      - Backend now properly validates SSH authentication methods
-      - Returns 400 error with clear message when SSH enabled but no credentials provided
-      - Error message: "SSH is enabled but no authentication method provided. Please provide either SSH password or SSH private key."
-      - Security vulnerability closed ✅
-      
-      **✅ SSH CONFIG MERGE FUNCTIONALITY WORKING:**
-      - Update password only: privateKey and passphrase preserved ✅
-      - Update privateKey only: password preserved ✅  
-      - Update other fields only: all SSH credentials unchanged ✅
-      - No double encryption across multiple updates ✅
-      - Proper field-level merging instead of object replacement ✅
-      
-      **✅ ENCRYPTION VERIFICATION:**
-      - All SSH passwords encrypted in database ✅
-      - All SSH private keys encrypted in database ✅
-      - All SSH passphrases encrypted in database ✅
-      - No plaintext credentials found in database ✅
-      
-      **TEST SCENARIOS COMPLETED:**
-      1. Backend validation test - SSH enabled but no auth method ✅
-      2. SSH config merge - update password only ✅
-      3. SSH config merge - update key only ✅
-      4. SSH config merge - no credential changes ✅
-      5. Verify no double encryption ✅
-      
-      **IMPACT:**
-      - All previously identified critical bugs are now fixed
-      - SSH authentication system is secure and functional
-      - Partner configuration updates work correctly without data loss
-      - Backend validation prevents invalid SSH configurations
-      
-      **STATUS:** All SSH authentication fixes verified and working correctly. Ready for production use.
+      **Status:** Documentation enhancement complete and verified. Ready for developer use.

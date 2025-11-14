@@ -1231,7 +1231,26 @@ async def update_settings(settings: List[SystemSetting], current_user: User = De
     
     return {"message": "Settings updated successfully"}
 
-@api_router.get("/settings/{key}", response_model=SystemSetting)
+@api_router.get(
+    "/settings/{key}",
+    response_model=SystemSetting,
+    tags=["System Settings"],
+    summary="Get specific setting",
+    description="""
+    Retrieve a single system setting by key.
+    
+    **Authentication Required:** Yes
+    
+    **Parameters:**
+    - key: Setting key (e.g., "refreshInterval")
+    
+    **Returns:**
+    - Setting object with key, value, and description
+    
+    **Errors:**
+    - 404: Setting not found
+    """
+)
 async def get_setting(key: str, current_user: User = Depends(get_current_user)):
     setting = await db.system_settings.find_one({"settingKey": key}, {"_id": 0})
     if not setting:

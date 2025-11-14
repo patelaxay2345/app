@@ -532,6 +532,199 @@ NhAAAAAwEAAQAAAQEA1234567890abcdef...
                 
         except Exception as e:
             self.log_result("encryption_verification", False, f"Test failed: {str(e)}")
+
+    async def test_public_stats_default_behavior(self):
+        """Test 7: Public Stats API - Default Behavior (All Partners, Last 30 Days)"""
+        print(f"\n🧪 Test 7: Public Stats API - Default Behavior")
+        
+        try:
+            # Test default endpoint without any parameters
+            async with self.session.get(f"{API_BASE}/public/stats") as response:
+                status = response.status
+                headers = dict(response.headers)
+                
+                if status == 200:
+                    data = await response.json()
+                    
+                    # Verify response format
+                    required_fields = ["calls", "submittals", "period"]
+                    missing_fields = [field for field in required_fields if field not in data]
+                    
+                    if not missing_fields:
+                        self.log_result("public_stats_default_format", True, "Response has all required fields")
+                        
+                        # Verify data types
+                        if isinstance(data["calls"], int) and isinstance(data["submittals"], int):
+                            self.log_result("public_stats_data_types", True, "Calls and submittals are integers")
+                        else:
+                            self.log_result("public_stats_data_types", False, f"Invalid data types: calls={type(data['calls'])}, submittals={type(data['submittals'])}")
+                        
+                        # Verify period format
+                        period = data.get("period", {})
+                        if "startDate" in period and "endDate" in period:
+                            self.log_result("public_stats_period_format", True, "Period has startDate and endDate")
+                            
+                            # Verify date format (YYYY-MM-DD)
+                            try:
+                                from datetime import datetime
+                                datetime.strptime(period["startDate"], "%Y-%m-%d")
+                                datetime.strptime(period["endDate"], "%Y-%m-%d")
+                                self.log_result("public_stats_date_format", True, "Dates are in YYYY-MM-DD format")
+                            except ValueError:
+                                self.log_result("public_stats_date_format", False, f"Invalid date format: {period}")
+                        else:
+                            self.log_result("public_stats_period_format", False, f"Period missing required fields: {period}")
+                    else:
+                        self.log_result("public_stats_default_format", False, f"Missing required fields: {missing_fields}")
+                    
+                    # Check CORS headers
+                    cors_header = headers.get("access-control-allow-origin")
+                    if cors_header:
+                        self.log_result("public_stats_cors_headers", True, f"CORS header present: {cors_header}")
+                    else:
+                        self.log_result("public_stats_cors_headers", False, "CORS header missing")
+                        
+                else:
+                    error_text = await response.text()
+                    self.log_result("public_stats_default", False, f"Request failed: {status} - {error_text}")
+                    
+        except Exception as e:
+            self.log_result("public_stats_default", False, f"Test failed: {str(e)}")
+
+    async def test_public_stats_custom_date_range(self):
+        """Test 8: Public Stats API - Custom Date Range"""
+        print(f"\n🧪 Test 8: Public Stats API - Custom Date Range")
+        
+        try:
+            # Test with custom date range
+            params = {
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31"
+            }
+            
+            async with self.session.get(f"{API_BASE}/public/stats", params=params) as response:
+                status = response.status
+                
+                if status == 200:
+                    data = await response.json()
+                    
+                    # Verify the date range is respected
+                    period = data.get("period", {})
+                    if period.get("startDate") == "2024-01-01" and period.get("endDate") == "2024-12-31":
+                        self.log_result("public_stats_custom_dates", True, "Custom date range respected")
+                    else:
+                        self.log_result("public_stats_custom_dates", False, f"Date range not respected: {period}")
+                    
+                    # Verify response structure is still correct
+                    if "calls" in data and "submittals" in data:
+                        self.log_result("public_stats_custom_structure", True, "Response structure correct with custom dates")
+                    else:
+                        self.log_result("public_stats_custom_structure", False, "Response structure incorrect")
+                        
+                else:
+                    error_text = await response.text()
+                    self.log_result("public_stats_custom_dates", False, f"Request failed: {status} - {error_text}")
+                    
+        except Exception as e:
+            self.log_result("public_stats_custom_dates", False, f"Test failed: {str(e)}")
+
+    async def test_public_stats_no_authentication(self):
+        """Test 9: Public Stats API - No Authentication Required"""
+        print(f"\n🧪 Test 9: Public Stats API - No Authentication Required")
+        
+        try:
+            # Test without any authentication headers
+            async with self.session.get(f"{API_BASE}/public/stats") as response:
+                status = response.status
+                
+                if status == 200:
+                    self.log_result("public_stats_no_auth", True, "Public endpoint accessible without authentication")
+                elif status == 401:
+                    self.log_result("public_stats_no_auth", False, "Public endpoint requires authentication (should not)")
+                else:
+                    error_text = await response.text()
+                    self.log_result("public_stats_no_auth", False, f"Unexpected status: {status} - {error_text}")
+                    
+        except Exception as e:
+            self.log_result("public_stats_no_auth", False, f"Test failed: {str(e)}")
+
+    async def test_public_stats_error_handling(self):
+        """Test 10: Public Stats API - Error Handling"""
+        print(f"\n🧪 Test 10: Public Stats API - Error Handling")
+        
+        try:
+            # Test with invalid partner_id
+            params = {"partner_id": "invalid-uuid-12345"}
+            async with self.session.get(f"{API_BASE}/public/stats", params=params) as response:
+                status = response.status
+                
+                if status == 404:
+                    self.log_result("public_stats_invalid_partner", True, "Correctly returns 404 for invalid partner_id")
+                elif status == 200:
+                    # Some implementations might return empty data instead of 404
+                    data = await response.json()
+                    if data.get("calls") == 0 and data.get("submittals") == 0:
+                        self.log_result("public_stats_invalid_partner", True, "Returns empty data for invalid partner_id")
+                    else:
+                        self.log_result("public_stats_invalid_partner", False, "Returns data for invalid partner_id")
+                else:
+                    self.log_result("public_stats_invalid_partner", False, f"Unexpected status for invalid partner: {status}")
+            
+            # Test with malformed dates
+            params = {"start_date": "invalid-date", "end_date": "2024-12-31"}
+            async with self.session.get(f"{API_BASE}/public/stats", params=params) as response:
+                status = response.status
+                
+                if status in [400, 422]:
+                    self.log_result("public_stats_invalid_dates", True, "Correctly handles malformed dates")
+                elif status == 200:
+                    # Some implementations might handle gracefully
+                    self.log_result("public_stats_invalid_dates", True, "Handles malformed dates gracefully")
+                else:
+                    self.log_result("public_stats_invalid_dates", False, f"Unexpected status for invalid dates: {status}")
+                    
+        except Exception as e:
+            self.log_result("public_stats_error_handling", False, f"Test failed: {str(e)}")
+
+    async def test_public_stats_cors_headers(self):
+        """Test 11: Public Stats API - CORS Headers Check"""
+        print(f"\n🧪 Test 11: Public Stats API - CORS Headers Check")
+        
+        try:
+            # Test with Origin header to trigger CORS
+            headers = {"Origin": "https://example.com"}
+            async with self.session.get(f"{API_BASE}/public/stats", headers=headers) as response:
+                response_headers = dict(response.headers)
+                
+                # Check for CORS headers
+                cors_headers = [
+                    "access-control-allow-origin",
+                    "access-control-allow-methods",
+                    "access-control-allow-headers"
+                ]
+                
+                found_cors_headers = []
+                for header in cors_headers:
+                    if header in response_headers:
+                        found_cors_headers.append(header)
+                
+                if found_cors_headers:
+                    self.log_result("public_stats_cors_present", True, f"CORS headers found: {found_cors_headers}")
+                else:
+                    self.log_result("public_stats_cors_present", False, "No CORS headers found")
+                
+                # Check Access-Control-Allow-Origin specifically
+                allow_origin = response_headers.get("access-control-allow-origin")
+                if allow_origin:
+                    if allow_origin == "*" or "example.com" in allow_origin:
+                        self.log_result("public_stats_cors_origin", True, f"Access-Control-Allow-Origin: {allow_origin}")
+                    else:
+                        self.log_result("public_stats_cors_origin", False, f"Unexpected CORS origin: {allow_origin}")
+                else:
+                    self.log_result("public_stats_cors_origin", False, "Access-Control-Allow-Origin header missing")
+                    
+        except Exception as e:
+            self.log_result("public_stats_cors", False, f"Test failed: {str(e)}")
     
     async def run_all_tests(self):
         """Run all test scenarios"""

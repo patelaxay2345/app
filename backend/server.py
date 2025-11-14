@@ -994,7 +994,37 @@ async def bulk_update_concurrency(update: BulkConcurrencyUpdate, current_user: U
         results.append(result)
     return {"results": results}
 
-@api_router.post("/concurrency/calculate")
+@api_router.post(
+    "/concurrency/calculate",
+    tags=["Concurrency Management"],
+    summary="Calculate suggested concurrency",
+    description="""
+    Calculate AI-suggested concurrency limit based on current metrics.
+    
+    **Authentication Required:** Yes
+    
+    **Algorithm:**
+    - Analyzes queued calls, running campaigns, and active calls
+    - Calculates multiple suggestions using different formulas
+    - Returns the maximum (capped between 5-100)
+    
+    **Formulas:**
+    1. queued_calls / 20
+    2. running_campaigns / 3
+    3. active_calls + (queued_calls / 50)
+    
+    **Returns:**
+    - Suggested limit value
+    - Reasoning explanation
+    
+    **Use Cases:**
+    - Smart concurrency optimization
+    - Decision support for admins
+    - Automated scaling recommendations
+    
+    **Note:** Returns default of 10 if no data available.
+    """
+)
 async def calculate_suggested_concurrency(partner_id: str, current_user: User = Depends(get_current_user)):
     snapshot = await db.dashboard_snapshots.find_one(
         {"partnerId": partner_id},

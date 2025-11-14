@@ -1183,7 +1183,38 @@ async def get_settings(current_user: User = Depends(get_current_user)):
     settings = await db.system_settings.find({}, {"_id": 0}).to_list(1000)
     return settings
 
-@api_router.put("/settings")
+@api_router.put(
+    "/settings",
+    tags=["System Settings"],
+    summary="Update system settings",
+    description="""
+    Update one or more system settings.
+    
+    **Authentication Required:** Yes
+    
+    **Request Body:**
+    Array of settings to update:
+    ```json
+    [
+        {
+            "settingKey": "refreshInterval",
+            "settingValue": 180,
+            "description": "Dashboard refresh interval in seconds"
+        }
+    ]
+    ```
+    
+    **Process:**
+    - Updates or creates settings (upsert)
+    - Records who made the change
+    - Updates timestamp
+    
+    **Use Cases:**
+    - Configure system behavior
+    - Tune performance parameters
+    - Adjust alert thresholds
+    """
+)
 async def update_settings(settings: List[SystemSetting], current_user: User = Depends(get_current_user)):
     for setting in settings:
         setting.updatedBy = current_user.id

@@ -219,7 +219,22 @@ async def login(credentials: UserLogin):
     user = User(**user_data)
     return Token(access_token=access_token, token_type="bearer", user=user)
 
-@api_router.get("/auth/me", response_model=User)
+@api_router.get(
+    "/auth/me",
+    response_model=User,
+    tags=["Authentication"],
+    summary="Get current user",
+    description="""
+    Retrieve the currently authenticated user's information.
+    
+    **Authentication Required:** Yes
+    
+    **Returns:**
+    - Complete user profile
+    - Last login timestamp
+    - User role and permissions
+    """
+)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 

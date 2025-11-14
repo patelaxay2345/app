@@ -799,9 +799,42 @@ async def refresh_dashboard(current_user: User = Depends(get_current_user)):
     return {"message": "Dashboard refresh completed"}
 
 # ============= Concurrency Management Routes =============
-@api_router.post("/partners/{partner_id}/concurrency")
+@api_router.post(
+    "/partners/{partner_id}/concurrency",
+    tags=["Concurrency Management"],
+    summary="Update partner concurrency",
+    description="""
+    Update call concurrency limit for a specific partner (dashboard inline edit).
+    
+    **Authentication Required:** Yes
+    
+    **Request Body:**
+    ```json
+    {
+        "newLimit": 50,
+        "reason": "Increased due to high queue volume"
+    }
+    ```
+    
+    **Process:**
+    1. Validates new limit
+    2. Updates MongoDB admin database
+    3. Updates partner's MySQL database settings table
+    4. Records change in concurrency history
+    5. Creates audit log in partner database
+    
+    **Returns:**
+    - Success status
+    - Old and new limit values
+    - Sync status (whether partner DB was updated)
+    
+    **Use Cases:**
+    - Quick concurrency adjustment from dashboard
+    - Performance tuning
+    - Managing call capacity
+    """
+)
 async def update_partner_concurrency(partner_id: str, update: ConcurrencyUpdate, current_user: User = Depends(get_current_user)):
-    """Update concurrency for a specific partner (called from dashboard)"""
     result = await concurrency_service.update_concurrency(
         partner_id,
         update.newLimit,

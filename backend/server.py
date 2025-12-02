@@ -702,7 +702,7 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
             "latest": {"$first": "$$ROOT"}
         }}
     ]
-    snapshots = await db.dashboard_snapshots.aggregate(pipeline).to_list(1000)
+    snapshots = await db.dashboard_snapshots.aggregate(pipeline, allowDiskUse=True).to_list(1000)
     
     total_campaigns_today = sum(s['latest']['campaignsToday'] for s in snapshots)
     total_running_campaigns = sum(s['latest']['runningCampaigns'] for s in snapshots)

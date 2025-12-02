@@ -64,9 +64,15 @@ class DataFetchService:
                 async with semaphore:
                     return await partner_task
             
-            await asyncio.gather(*[fetch_with_limit(task) for task in tasks], return_exceptions=True)
+            results = await asyncio.gather(*[fetch_with_limit(task) for task in tasks], return_exceptions=True)
             
-            logger.info("Data fetch completed for all partners")
+            # Log snapshot summary for all partners
+            snapshots_summary = []
+            for result in results:
+                if result and not isinstance(result, Exception):
+                    snapshots_summary.append(result)
+            
+            logger.info(f"Data fetch completed for all partners. Snapshots: {snapshots_summary}")
         
         except Exception as e:
             logger.error(f"Error in fetch_all_partners: {str(e)}")
@@ -84,7 +90,7 @@ class DataFetchService:
             
             # Query partner database for REAL metrics
             metrics = await self._fetch_partner_metrics_real(partner)
-            
+
             if metrics:
                 # Calculate utilization
                 utilization = (metrics['activeCalls'] / partner.concurrencyLimit * 100) if partner.concurrencyLimit > 0 else 0
@@ -99,9 +105,9 @@ class DataFetchService:
                     runningCampaigns=metrics['runningCampaigns'],
                     activeCalls=metrics['activeCalls'],
                     queuedCalls=metrics['queuedCalls'],
-                    completedCallsToday=metrics.get('completedCallsToday', 0),
-                    voicemailCount=metrics.get('voicemailCount', 0),
-                    customerEndedCount=metrics.get('customerEndedCount', 0),
+                    completedCallsToday=metrics.get('completedCallsToday', 0) or 0,
+                    voicemailCount=metrics.get('voicemailCount', 0) or 0,
+                    customerEndedCount=metrics.get('customerEndedCount', 0) or 0,
                     remainingCalls=metrics.get('remainingCalls', 0),
                     concurrencyLimit=partner.concurrencyLimit,
                     utilizationPercent=round(utilization, 2),
@@ -129,6 +135,18 @@ class DataFetchService:
                 )
                 
                 logger.info(f"Successfully fetched data for {partner.partnerName}")
+                
+                # Return snapshot summary for logging
+                return {
+                    "partner": partner.partnerName,
+                    "campaignsToday": metrics['campaignsToday'],
+                    "runningCampaigns": metrics['runningCampaigns'],
+                    "activeCalls": metrics['activeCalls'],
+                    "queuedCalls": metrics['queuedCalls'],
+                    "completedCallsToday": metrics.get('completedCallsToday', 0) or 0,
+                    "utilizationPercent": round(utilization, 2),
+                    "alertLevel": alert_level.value
+                }
             else:
                 raise Exception("Failed to fetch metrics")
         
@@ -145,6 +163,7 @@ class DataFetchService:
                     "lastSyncAt": datetime.now(timezone.utc).isoformat()
                 }}
             )
+            return None
     
     async def _fetch_partner_metrics_real(self, partner: PartnerConfig):
         """Fetch REAL data from partner MySQL database via SSH tunnel"""

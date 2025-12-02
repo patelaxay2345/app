@@ -69,4 +69,7 @@ class EncryptionService:
             
             return plaintext.decode()
         except Exception as e:
+            # Debug logging
+            print(f"DEBUG: Decryption failed. Key start: {self.key[:5]!r}")
+            print(f"DEBUG: Encrypted data start: {encrypted[:20]!r}...")
             raise Exception(f"Decryption error: {str(e)}")

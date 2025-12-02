@@ -702,10 +702,7 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
             "latest": {"$first": "$$ROOT"}
         }}
     ]
-<<<<<<< HEAD
     # Add allowDiskUse=True for MongoDB Atlas compatibility (prevents memory limit errors)
-=======
->>>>>>> edbdb76dd7f1caeafe03966a2f00663d1cbfea40
     snapshots = await db.dashboard_snapshots.aggregate(pipeline, allowDiskUse=True).to_list(1000)
     
     total_campaigns_today = sum(s['latest']['campaignsToday'] for s in snapshots)

@@ -694,16 +694,17 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
     # Get all partners
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)
     
-    # Get latest snapshots
-    pipeline = [
-        {"$sort": {"snapshotTime": -1}},
-        {"$group": {
-            "_id": "$partnerId",
-            "latest": {"$first": "$$ROOT"}
-        }}
-    ]
-    # Add allowDiskUse=True for MongoDB Atlas compatibility (prevents memory limit errors)
-    snapshots = await db.dashboard_snapshots.aggregate(pipeline, allowDiskUse=True).to_list(1000)
+    # Get latest snapshots using find queries to avoid memory limit
+    partners_data = await db.partner_configs.find({}, {"id": 1, "_id": 0}).to_list(1000)
+    snapshots = []
+    for partner in partners_data:
+        latest = await db.dashboard_snapshots.find_one(
+            {"partnerId": partner["id"]},
+            {"_id": 0},
+            sort=[("snapshotTime", -1)]
+        )
+        if latest:
+            snapshots.append({"latest": latest})
     
     total_campaigns_today = sum(s['latest']['campaignsToday'] for s in snapshots)
     total_running_campaigns = sum(s['latest']['runningCampaigns'] for s in snapshots)

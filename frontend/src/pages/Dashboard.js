@@ -21,6 +21,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNowEST, getCurrentEST } from '../utils/timezone';
+import { formatNumber, formatPercentage } from '../utils/formatNumber';
+import TimezoneIndicator from '../components/TimezoneIndicator';
 import { Progress } from '../components/ui/progress';
 import { DashboardSkeleton } from '../components/ui/skeleton';
 import { Switch } from '../components/ui/switch';
@@ -32,8 +35,9 @@ function Dashboard() {
   const [alerts, setAlerts] = useState({ critical: 0, high: 0, medium: 0, offline: 0 });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState(getCurrentEST());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [syncingPartners, setSyncingPartners] = useState(new Set());
   const [selectedPartner, setSelectedPartner] = useState('all');
   const [selectedOverviewPartner, setSelectedOverviewPartner] = useState('all');
   const [editingConcurrency, setEditingConcurrency] = useState(null);
@@ -43,7 +47,13 @@ function Dashboard() {
 
   const fetchDashboardData = async (manual = false) => {
     try {
-      if (manual) setRefreshing(true);
+      if (manual) {
+        setRefreshing(true);
+        // Trigger backend refresh first
+        await axios.post(`${API}/dashboard/refresh`);
+        // Wait a moment for sync to start
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
 
       const [overviewRes, partnersRes, alertsRes] = await Promise.all([
         axios.get(`${API}/dashboard/overview`),
@@ -54,10 +64,47 @@ function Dashboard() {
       setOverview(overviewRes.data);
       setPartners(partnersRes.data);
       setAlerts(alertsRes.data);
-      setLastUpdated(new Date());
+      // Use EST timestamp from backend if available, otherwise convert current time to EST
+      const estTime = overviewRes.data.lastUpdatedEST ? new Date(overviewRes.data.lastUpdatedEST) : getCurrentEST();
+      setLastUpdated(estTime);
 
       if (manual) {
-        toast.success('Dashboard refreshed successfully');
+        // Wait for all syncing to complete before showing success
+        const checkSyncComplete = async () => {
+          let attempts = 0;
+          while (attempts < 30) { // Max 30 seconds
+            const partnersCheck = await axios.get(`${API}/dashboard/partners`);
+            const syncing = partnersCheck.data.filter(p => p.partner.lastSyncStatus === 'IN_PROGRESS');
+            
+            // Always update partners to show real-time sync status
+            setPartners(partnersCheck.data);
+            
+            // Update overview metrics as partners complete
+            const [currentOverview, currentAlerts] = await Promise.all([
+              axios.get(`${API}/dashboard/overview`),
+              axios.get(`${API}/alerts/summary`),
+            ]);
+            
+            setOverview(currentOverview.data);
+            setAlerts(currentAlerts.data);
+            const currentEstTime = currentOverview.data.lastUpdatedEST ? new Date(currentOverview.data.lastUpdatedEST) : getCurrentEST();
+            setLastUpdated(currentEstTime);
+            
+            if (syncing.length === 0) {
+              toast.success('Dashboard refreshed successfully');
+              break;
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            attempts++;
+          }
+          
+          if (attempts >= 30) {
+            toast.warning('Refresh completed but some partners may still be syncing');
+          }
+        };
+        
+        await checkSyncComplete();
       }
     } catch (error) {
       toast.error('Failed to fetch dashboard data');
@@ -78,6 +125,36 @@ function Dashboard() {
       return () => clearInterval(interval);
     }
   }, [autoRefresh]);
+
+  // Poll for sync status updates more frequently
+  useEffect(() => {
+    const syncStatusInterval = setInterval(async () => {
+      try {
+        const partnersRes = await axios.get(`${API}/dashboard/partners`);
+        const currentSyncing = partners.filter(p => p.partner.lastSyncStatus === 'IN_PROGRESS').length;
+        const newSyncing = partnersRes.data.filter(p => p.partner.lastSyncStatus === 'IN_PROGRESS').length;
+        
+        setPartners(partnersRes.data);
+        
+        // If sync just completed, refresh overview metrics
+        if (currentSyncing > 0 && newSyncing === 0) {
+          const [overviewRes, alertsRes] = await Promise.all([
+            axios.get(`${API}/dashboard/overview`),
+            axios.get(`${API}/alerts/summary`),
+          ]);
+          
+          setOverview(overviewRes.data);
+          setAlerts(alertsRes.data);
+          const estTime = overviewRes.data.lastUpdatedEST ? new Date(overviewRes.data.lastUpdatedEST) : getCurrentEST();
+          setLastUpdated(estTime);
+        }
+      } catch (error) {
+        // Silent fail for sync status updates
+      }
+    }, 3000); // 3 seconds for more responsive updates
+
+    return () => clearInterval(syncStatusInterval);
+  }, [partners]);
 
   const getAlertClass = (alertLevel) => {
     const classes = {
@@ -208,19 +285,38 @@ function Dashboard() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-3xl font-bold text-white mb-1">Dashboard</h2>
-            <p className="text-gray-400 text-sm">
-              Last updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
-            </p>
+            <div className="space-y-1">
+              <p className="text-gray-400 text-sm">
+                Last updated {formatDistanceToNowEST(lastUpdated)}
+              </p>
+              <TimezoneIndicator />
+            </div>
           </div>
-          <Button
-            onClick={() => fetchDashboardData(true)}
-            disabled={refreshing}
-            data-testid="refresh-dashboard-button"
-            className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30"
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
+          <div className="flex items-center space-x-3">
+            {/* Sync Status Indicator */}
+            <div className="text-sm text-gray-400">
+              {partners.filter(p => p.partner.lastSyncStatus === 'IN_PROGRESS').length > 0 ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-pulse h-2 w-2 bg-blue-400 rounded-full"></div>
+                  <span>
+                    {partners.filter(p => p.partner.lastSyncStatus === 'IN_PROGRESS').map(p => p.partner.partnerName).join(', ')} syncing
+                  </span>
+                </div>
+              ) : (
+                <span className="text-green-400">All partners synced</span>
+              )}
+            </div>
+            
+            <Button
+              onClick={() => fetchDashboardData(true)}
+              disabled={refreshing}
+              data-testid="refresh-dashboard-button"
+              className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </div>
         </div>
 
         {/* Alert Summary Cards */}
@@ -228,8 +324,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-4 border border-red-500/30">
             <div className="flex items-center justify-between mb-2">
               <AlertTriangle className="w-8 h-8 text-red-400" />
-              <span className="text-3xl font-bold text-red-400" data-testid="critical-alerts-count">
-                {alerts.critical}
+              <span className="text-3xl font-bold text-red-400 text-right" data-testid="critical-alerts-count">
+                {formatNumber(alerts.critical)}
               </span>
             </div>
             <p className="text-sm text-gray-400">Critical Alerts</p>
@@ -238,8 +334,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-4 border border-orange-500/30">
             <div className="flex items-center justify-between mb-2">
               <AlertTriangle className="w-8 h-8 text-orange-400" />
-              <span className="text-3xl font-bold text-orange-400" data-testid="high-alerts-count">
-                {alerts.high}
+              <span className="text-3xl font-bold text-orange-400 text-right" data-testid="high-alerts-count">
+                {formatNumber(alerts.high)}
               </span>
             </div>
             <p className="text-sm text-gray-400">High Priority</p>
@@ -248,8 +344,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-4 border border-yellow-500/30">
             <div className="flex items-center justify-between mb-2">
               <AlertTriangle className="w-8 h-8 text-yellow-400" />
-              <span className="text-3xl font-bold text-yellow-400" data-testid="medium-alerts-count">
-                {alerts.medium}
+              <span className="text-3xl font-bold text-yellow-400 text-right" data-testid="medium-alerts-count">
+                {formatNumber(alerts.medium)}
               </span>
             </div>
             <p className="text-sm text-gray-400">Medium Priority</p>
@@ -258,8 +354,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-4 border border-gray-500/30">
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-8 h-8 text-gray-400" />
-              <span className="text-3xl font-bold text-gray-400" data-testid="offline-partners-count">
-                {alerts.offline}
+              <span className="text-3xl font-bold text-gray-400 text-right" data-testid="offline-partners-count">
+                {formatNumber(alerts.offline)}
               </span>
             </div>
             <p className="text-sm text-gray-400">Partners Offline</p>
@@ -291,8 +387,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Activity className="w-10 h-10 text-blue-400" />
-              <span className="text-4xl font-bold text-white" data-testid="campaigns-today">
-                {displayOverview?.campaignsToday || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="campaigns-today">
+                {formatNumber(displayOverview?.campaignsToday || 0)}
               </span>
             </div>
             <p className="text-gray-400">Campaigns Created Today</p>
@@ -301,8 +397,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <TrendingUp className="w-10 h-10 text-green-400" />
-              <span className="text-4xl font-bold text-white" data-testid="running-campaigns">
-                {displayOverview?.runningCampaigns || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="running-campaigns">
+                {formatNumber(displayOverview?.runningCampaigns || 0)}
               </span>
             </div>
             <p className="text-gray-400">Running Campaigns</p>
@@ -311,8 +407,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Phone className="w-10 h-10 text-purple-400" />
-              <span className="text-4xl font-bold text-white" data-testid="active-calls">
-                {displayOverview?.activeCalls || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="active-calls">
+                {formatNumber(displayOverview?.activeCalls || 0)}
               </span>
             </div>
             <p className="text-gray-400">Active Calls</p>
@@ -321,8 +417,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <PhoneIncoming className="w-10 h-10 text-orange-400" />
-              <span className="text-4xl font-bold text-white" data-testid="queued-calls">
-                {displayOverview?.queuedCalls || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="queued-calls">
+                {formatNumber(displayOverview?.queuedCalls || 0)}
               </span>
             </div>
             <p className="text-gray-400">Queued Calls</p>
@@ -331,8 +427,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Check className="w-10 h-10 text-emerald-400" />
-              <span className="text-4xl font-bold text-white" data-testid="completed-calls-today">
-                {displayOverview?.completedCallsToday || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="completed-calls-today">
+                {formatNumber(displayOverview?.completedCallsToday || 0)}
               </span>
             </div>
             <p className="text-gray-400">Completed Calls Today</p>
@@ -341,8 +437,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Clock className="w-10 h-10 text-yellow-400" />
-              <span className="text-4xl font-bold text-white" data-testid="remaining-calls">
-                {displayOverview?.remainingCalls || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="remaining-calls">
+                {formatNumber(displayOverview?.remainingCalls || 0)}
               </span>
             </div>
             <p className="text-gray-400">Remaining Calls</p>
@@ -351,8 +447,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Users className="w-10 h-10 text-pink-400" />
-              <span className="text-4xl font-bold text-white" data-testid="total-partners">
-                {displayOverview?.activePartners}/{displayOverview?.totalPartners || 0}
+              <span className="text-4xl font-bold text-white text-right" data-testid="total-partners">
+                {formatNumber(displayOverview?.activePartners)}/{formatNumber(displayOverview?.totalPartners || 0)}
               </span>
             </div>
             <p className="text-gray-400">Active / Total Partners</p>
@@ -361,8 +457,8 @@ function Dashboard() {
           <div className="glass rounded-xl p-6 border border-white/10 card-hover">
             <div className="flex items-center justify-between mb-4">
               <Activity className="w-10 h-10 text-cyan-400" />
-              <span className="text-4xl font-bold text-white" data-testid="avg-utilization">
-                {displayOverview?.avgUtilization?.toFixed(1) || 0}%
+              <span className="text-4xl font-bold text-white text-right" data-testid="avg-utilization">
+                {formatPercentage(displayOverview?.avgUtilization || 0)}
               </span>
             </div>
             <p className="text-gray-400">Avg Concurrency Utilization</p>
@@ -403,7 +499,7 @@ function Dashboard() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Queued</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Concurrency</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Pause Non-Priority</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Sync Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Actions</th>
                 </tr>
               </thead>
@@ -427,17 +523,17 @@ function Dashboard() {
                           <p className="text-xs text-gray-400">Tenant {partner.partner.tenantId}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-white" data-testid="campaigns-today-cell">
-                        {snapshot?.campaignsToday || 0}
+                      <td className="px-6 py-4 text-white text-right" data-testid="campaigns-today-cell">
+                        {formatNumber(snapshot?.campaignsToday || 0)}
                       </td>
-                      <td className="px-6 py-4 text-white" data-testid="running-campaigns-cell">
-                        {snapshot?.runningCampaigns || 0}
+                      <td className="px-6 py-4 text-white text-right" data-testid="running-campaigns-cell">
+                        {formatNumber(snapshot?.runningCampaigns || 0)}
                       </td>
-                      <td className="px-6 py-4 text-white" data-testid="active-calls-cell">
-                        {snapshot?.activeCalls || 0}
+                      <td className="px-6 py-4 text-white text-right" data-testid="active-calls-cell">
+                        {formatNumber(snapshot?.activeCalls || 0)}
                       </td>
-                      <td className="px-6 py-4 text-white" data-testid="queued-calls-cell">
-                        {snapshot?.queuedCalls || 0}
+                      <td className="px-6 py-4 text-white text-right" data-testid="queued-calls-cell">
+                        {formatNumber(snapshot?.queuedCalls || 0)}
                       </td>
                       <td className="px-6 py-4" data-testid="utilization-cell">
                         <div className="space-y-2">
@@ -483,9 +579,9 @@ function Dashboard() {
                               <div className="flex-1">
                                 <div className="flex items-center justify-between text-sm mb-1">
                                   <span className="text-white">
-                                    {snapshot?.activeCalls || 0}/{partner.partner.concurrencyLimit}
+                                    {formatNumber(snapshot?.activeCalls || 0)}/{formatNumber(partner.partner.concurrencyLimit)}
                                   </span>
-                                  <span className="text-gray-400">{utilization.toFixed(1)}%</span>
+                                  <span className="text-gray-400">{formatPercentage(utilization)}</span>
                                 </div>
                                 <Progress value={utilization} className="h-2" />
                               </div>
@@ -526,14 +622,42 @@ function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getAlertBadge(
-                            alertLevel
-                          )}`}
-                          data-testid="alert-badge"
-                        >
-                          {alertLevel}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          {partner.partner.lastSyncStatus === 'IN_PROGRESS' ? (
+                            <div className="flex items-center space-x-1 animate-pulse">
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-400"></div>
+                              <span className="text-xs text-blue-400 font-medium">Syncing...</span>
+                            </div>
+                          ) : partner.partner.lastSyncStatus === 'SUCCESS' ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="h-2 w-2 bg-green-400 rounded-full"></div>
+                              <span
+                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getAlertBadge(
+                                  alertLevel
+                                )}`}
+                                data-testid="alert-badge"
+                              >
+                                {alertLevel}
+                              </span>
+                            </div>
+                          ) : partner.partner.lastSyncStatus === 'FAILED' ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="h-2 w-2 bg-red-400 rounded-full"></div>
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border bg-red-500/20 text-red-400 border-red-500/30">
+                                SYNC FAILED
+                              </span>
+                            </div>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getAlertBadge(
+                                alertLevel
+                              )}`}
+                              data-testid="alert-badge"
+                            >
+                              {alertLevel}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <Button

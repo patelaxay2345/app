@@ -9,6 +9,8 @@ import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Progress } from '../components/ui/progress';
 import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNowEST } from '../utils/timezone';
+import { formatNumber, formatPercentage } from '../utils/formatNumber';
 import { PartnerDetailSkeleton } from '../components/ui/skeleton';
 
 function PartnerDetail() {
@@ -129,21 +131,21 @@ function PartnerDetail() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="glass rounded-xl p-6 border border-white/10">
               <p className="text-gray-400 text-sm mb-2">Campaigns Today</p>
-              <p className="text-4xl font-bold text-white" data-testid="campaigns-today-metric">
-                {metrics.campaignsToday}
+              <p className="text-4xl font-bold text-white text-right" data-testid="campaigns-today-metric">
+                {formatNumber(metrics.campaignsToday)}
               </p>
             </div>
             <div className="glass rounded-xl p-6 border border-white/10">
               <p className="text-gray-400 text-sm mb-2">Running Campaigns</p>
-              <p className="text-4xl font-bold text-white">{metrics.runningCampaigns}</p>
+              <p className="text-4xl font-bold text-white text-right">{formatNumber(metrics.runningCampaigns)}</p>
             </div>
             <div className="glass rounded-xl p-6 border border-white/10">
               <p className="text-gray-400 text-sm mb-2">Active Calls</p>
-              <p className="text-4xl font-bold text-white">{metrics.activeCalls}</p>
+              <p className="text-4xl font-bold text-white text-right">{formatNumber(metrics.activeCalls)}</p>
             </div>
             <div className="glass rounded-xl p-6 border border-white/10">
               <p className="text-gray-400 text-sm mb-2">Queued Calls</p>
-              <p className="text-4xl font-bold text-white">{metrics.queuedCalls}</p>
+              <p className="text-4xl font-bold text-white text-right">{formatNumber(metrics.queuedCalls)}</p>
             </div>
           </div>
         )}
@@ -165,7 +167,7 @@ function PartnerDetail() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-gray-300">Concurrency Utilization</span>
                       <span className="text-white font-semibold">
-                        {metrics.activeCalls}/{partner.concurrencyLimit} ({metrics.utilizationPercent.toFixed(1)}%)
+                        {formatNumber(metrics.activeCalls)}/{formatNumber(partner.concurrencyLimit)} ({formatPercentage(metrics.utilizationPercent)})
                       </span>
                     </div>
                     <Progress value={metrics.utilizationPercent} className="h-3" />
@@ -179,7 +181,7 @@ function PartnerDetail() {
                     <div className="bg-black/20 rounded-lg p-4">
                       <p className="text-gray-400 text-sm mb-1">Last Synced</p>
                       <p className="text-white font-semibold text-lg">
-                        {formatDistanceToNow(new Date(metrics.snapshotTime), { addSuffix: true })}
+                        {formatDistanceToNowEST(metrics.snapshotTimeEST || metrics.snapshotTime)} (EST)
                       </p>
                     </div>
                   </div>
@@ -228,7 +230,7 @@ function PartnerDetail() {
                     {logs.map((log) => (
                       <tr key={log.id} className="hover:bg-white/5">
                         <td className="px-6 py-4 text-gray-300">
-                          {formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}
+                          {formatDistanceToNowEST(log.timestamp)}
                         </td>
                         <td className="px-6 py-4">
                           <span
@@ -241,7 +243,7 @@ function PartnerDetail() {
                             {log.connectionStatus}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-white">{log.responseTimeMs}ms</td>
+                        <td className="px-6 py-4 text-white text-right">{formatNumber(log.responseTimeMs)}ms</td>
                         <td className="px-6 py-4 text-gray-400 text-sm">{log.errorMessage || '-'}</td>
                       </tr>
                     ))}
@@ -273,10 +275,10 @@ function PartnerDetail() {
                     {history.map((item) => (
                       <tr key={item.id} className="hover:bg-white/5">
                         <td className="px-6 py-4 text-gray-300">
-                          {formatDistanceToNow(new Date(item.changedAt), { addSuffix: true })}
+                          {formatDistanceToNowEST(item.changedAt)}
                         </td>
-                        <td className="px-6 py-4 text-white">{item.oldLimit}</td>
-                        <td className="px-6 py-4 text-white font-semibold">{item.newLimit}</td>
+                        <td className="px-6 py-4 text-white text-right">{formatNumber(item.oldLimit)}</td>
+                        <td className="px-6 py-4 text-white font-semibold text-right">{formatNumber(item.newLimit)}</td>
                         <td className="px-6 py-4 text-gray-400 text-sm">{item.reason || '-'}</td>
                         <td className="px-6 py-4">
                           <span

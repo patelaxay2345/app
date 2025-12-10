@@ -132,6 +132,7 @@ class DashboardSnapshot(BaseModel):
     alertLevel: AlertLevel = AlertLevel.NORMAL
     alertMessage: Optional[str] = None
     snapshotTime: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    snapshotTimeEST: Optional[datetime] = None
     dataFetchTimeMs: int = 0
 
 # Connection Log Models
@@ -197,6 +198,7 @@ class DashboardOverview(BaseModel):
     activePartners: int
     avgUtilization: float
     lastUpdated: datetime
+    lastUpdatedEST: Optional[datetime] = None
 
 class PartnerDashboardData(BaseModel):
     partner: PartnerConfig

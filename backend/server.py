@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 import jwt
 from passlib.context import CryptContext
 import uuid
+import pytz
 
 from models import *
 from services.encryption import EncryptionService
@@ -100,6 +101,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Helper functions
+def convert_utc_to_est(utc_datetime):
+    """Convert UTC datetime to EST timezone"""
+    if not utc_datetime:
+        return None
+    
+    # Ensure the datetime is timezone-aware (UTC)
+    if isinstance(utc_datetime, str):
+        utc_datetime = datetime.fromisoformat(utc_datetime.replace('Z', '+00:00'))
+    
+    if utc_datetime.tzinfo is None:
+        utc_datetime = utc_datetime.replace(tzinfo=timezone.utc)
+    
+    # Convert to EST
+    est_tz = pytz.timezone('America/New_York')
+    return utc_datetime.astimezone(est_tz)
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -705,16 +722,29 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
         )
         if latest:
             snapshots.append({"latest": latest})
+            logger.info(f"Found snapshot for partner {partner['id']}: campaigns={latest['campaignsToday']}, completed={latest.get('completedCallsToday', 0)}")
     
-    total_campaigns_today = sum(s['latest']['campaignsToday'] for s in snapshots)
-    total_running_campaigns = sum(s['latest']['runningCampaigns'] for s in snapshots)
-    total_active_calls = sum(s['latest']['activeCalls'] for s in snapshots)
-    total_queued_calls = sum(s['latest']['queuedCalls'] for s in snapshots)
-    total_completed_calls_today = sum(s['latest'].get('completedCallsToday', 0) for s in snapshots)
-    total_remaining_calls = sum(s['latest'].get('remainingCalls', 0) for s in snapshots)
+    total_campaigns_today = sum(s['latest']['campaignsToday'] for s in snapshots if s.get('latest'))
+    total_running_campaigns = sum(s['latest']['runningCampaigns'] for s in snapshots if s.get('latest'))
+    total_active_calls = sum(s['latest']['activeCalls'] for s in snapshots if s.get('latest'))
+    total_queued_calls = sum(s['latest']['queuedCalls'] for s in snapshots if s.get('latest'))
+    total_completed_calls_today = sum(s['latest'].get('completedCallsToday', 0) for s in snapshots if s.get('latest'))
+    total_remaining_calls = sum(s['latest'].get('remainingCalls', 0) for s in snapshots if s.get('latest'))
+    
+    # Debug logging
+    logger.info(f"Dashboard totals calculation:")
+    logger.info(f"  Snapshots count: {len(snapshots)}")
+    for i, s in enumerate(snapshots):
+        if s.get('latest'):
+            logger.info(f"  Partner {i+1}: campaigns={s['latest']['campaignsToday']}, completed={s['latest'].get('completedCallsToday', 0)}")
+    logger.info(f"  Final totals: campaigns={total_campaigns_today}, completed={total_completed_calls_today}")
     
     active_partners = sum(1 for p in partners if p.get('isActive', True))
-    avg_utilization = sum(s['latest']['utilizationPercent'] for s in snapshots) / len(snapshots) if snapshots else 0
+    avg_utilization = sum(s['latest']['utilizationPercent'] for s in snapshots if s.get('latest')) / len(snapshots) if snapshots else 0
+    
+    # Get current time in both UTC and EST
+    utc_now = datetime.now(timezone.utc)
+    est_now = convert_utc_to_est(utc_now)
     
     return DashboardOverview(
         campaignsToday=total_campaigns_today,
@@ -726,7 +756,8 @@ async def get_dashboard_overview(current_user: User = Depends(get_current_user))
         totalPartners=len(partners),
         activePartners=active_partners,
         avgUtilization=avg_utilization,
-        lastUpdated=datetime.now(timezone.utc)
+        lastUpdated=utc_now,
+        lastUpdatedEST=est_now
     )
 
 @api_router.get(

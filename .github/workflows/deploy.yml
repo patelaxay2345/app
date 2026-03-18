@@ -34,7 +34,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           source: "image.tar.gz,docker-compose.prod.yml,deployment/nginx-host.conf"
-          target: /opt/jobtalk-admin
+          target: /opt/jobtalk-superadmin
 
       - name: Deploy on Linode
         uses: appleboy/ssh-action@v1.0.3
@@ -44,7 +44,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            cd /opt/jobtalk-admin
+            cd /opt/jobtalk-superadmin
 
             # Load Docker image
             docker load < image.tar.gz

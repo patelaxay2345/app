@@ -3,7 +3,8 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import Layout from '../components/Layout';
 import { API } from '../App';
-import { Plus, Edit, Trash2, TestTube, Eye, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, TestTube, Eye, Loader2, ChevronDown } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
@@ -30,6 +31,8 @@ function Partners() {
     dbUsername: '',
     dbPassword: '',
     concurrencyLimit: 10,
+    priority: 4,
+    maxConcurrency: 50,
     isActive: true,
     sshConfig: {
       enabled: true,
@@ -148,6 +151,8 @@ function Partners() {
       dbUsername: '',
       dbPassword: '',
       concurrencyLimit: 10,
+      priority: 4,
+      maxConcurrency: 50,
       isActive: true,
       sshConfig: {
         enabled: true,
@@ -173,6 +178,8 @@ function Partners() {
       dbUsername: partner.dbUsername,
       dbPassword: '', // Don't show encrypted password
       concurrencyLimit: partner.concurrencyLimit,
+      priority: partner.priority ?? 4,
+      maxConcurrency: partner.maxConcurrency ?? 50,
       isActive: partner.isActive,
       sshConfig: {
         ...partner.sshConfig,
@@ -287,16 +294,47 @@ function Partners() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-gray-300">Concurrency Limit</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={formData.concurrencyLimit}
-                    onChange={(e) => setFormData({ ...formData, concurrencyLimit: e.target.value })}
-                    className="bg-black/40 border-white/10 text-white"
-                  />
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Concurrency Limit</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={formData.concurrencyLimit}
+                      onChange={(e) => setFormData({ ...formData, concurrencyLimit: parseInt(e.target.value) || 1 })}
+                      className="bg-black/40 border-white/10 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Max Concurrency</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={formData.maxConcurrency}
+                      onChange={(e) => setFormData({ ...formData, maxConcurrency: parseInt(e.target.value) || 1 })}
+                      className="bg-black/40 border-white/10 text-white"
+                    />
+                    <p className="text-xs text-gray-500">Hard ceiling for this client</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Priority</Label>
+                    <Select
+                      value={String(formData.priority)}
+                      onValueChange={(v) => setFormData({ ...formData, priority: parseInt(v) })}
+                    >
+                      <SelectTrigger className="bg-black/40 border-white/10 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#1a1a2e] border-white/10 text-white">
+                        <SelectItem value="1">P1 · Highest (40% pool)</SelectItem>
+                        <SelectItem value="2">P2 · High (30% pool)</SelectItem>
+                        <SelectItem value="3">P3 · Medium (20% pool)</SelectItem>
+                        <SelectItem value="4">P4 · Low (10% pool)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500">Tier allocation weight</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
@@ -432,7 +470,9 @@ function Partners() {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Partner Name</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Tenant ID</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Database</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Priority</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Concurrency</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Max</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Actions</th>
                 </tr>
@@ -448,7 +488,14 @@ function Partners() {
                       <p className="text-white text-sm">{partner.dbHost}</p>
                       <p className="text-gray-400 text-xs">{partner.dbName}</p>
                     </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const meta = { 1: { label: 'P1', color: 'text-purple-400', bg: 'bg-purple-500/20', border: 'border-purple-500/30' }, 2: { label: 'P2', color: 'text-blue-400', bg: 'bg-blue-500/20', border: 'border-blue-500/30' }, 3: { label: 'P3', color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500/30' }, 4: { label: 'P4', color: 'text-gray-400', bg: 'bg-gray-500/20', border: 'border-gray-500/30' } }[partner.priority ?? 4];
+                        return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${meta.bg} ${meta.color} border ${meta.border}`}>{meta.label}</span>;
+                      })()}
+                    </td>
                     <td className="px-6 py-4 text-white">{partner.concurrencyLimit}</td>
+                    <td className="px-6 py-4 text-gray-400">{partner.maxConcurrency ?? 50}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${

@@ -15,6 +15,9 @@ RUN yarn install --frozen-lockfile --production=false
 # Copy source code
 COPY frontend/ ./
 
+# Set production API URL
+ENV REACT_APP_BACKEND_URL=https://superadmin.jobtalk.ai
+
 # Build frontend
 RUN yarn build
 

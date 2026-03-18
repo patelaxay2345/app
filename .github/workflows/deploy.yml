@@ -1,0 +1,99 @@
+name: Deploy to Linode
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: jobtalk-partner-portal
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Save Docker image
+        run: |
+          docker save ${{ env.IMAGE_NAME }}:latest | gzip > image.tar.gz
+
+      - name: Copy files to Linode
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          source: "image.tar.gz,docker-compose.prod.yml,deployment/nginx-host.conf"
+          target: /opt/jobtalk-admin
+
+      - name: Deploy on Linode
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd /opt/jobtalk-admin
+
+            # Load Docker image
+            docker load < image.tar.gz
+
+            # Export env vars for docker-compose
+            export CI_REGISTRY_IMAGE=${{ env.IMAGE_NAME }}
+            export IMAGE_TAG=latest
+            export MONGO_URL="${{ secrets.MONGO_URL }}"
+            export DB_NAME="${{ secrets.DB_NAME }}"
+            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+            export ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}"
+            export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+            export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            export AWS_REGION="${{ secrets.AWS_REGION }}"
+            export SMTP_FROM_EMAIL="${{ secrets.SMTP_FROM_EMAIL }}"
+            export CORS_ORIGINS="https://superadmin.jobtalk.ai"
+
+            # Start/update the app container
+            docker compose -f docker-compose.prod.yml up -d --force-recreate
+
+            # Add nginx site config (does NOT touch existing sites)
+            cp deployment/nginx-host.conf /etc/nginx/sites-available/superadmin.jobtalk.ai
+            ln -sf /etc/nginx/sites-available/superadmin.jobtalk.ai /etc/nginx/sites-enabled/
+
+            # Get SSL cert if not already present (does NOT affect other certs)
+            if [ ! -f /etc/letsencrypt/live/superadmin.jobtalk.ai/fullchain.pem ]; then
+              mkdir -p /var/www/certbot
+              # Temporary HTTP-only config for cert issuance
+              cat > /etc/nginx/sites-available/superadmin.jobtalk.ai <<'TMPCONF'
+            server {
+                listen 80;
+                server_name superadmin.jobtalk.ai;
+                location /.well-known/acme-challenge/ { root /var/www/certbot; }
+                location / { proxy_pass http://127.0.0.1:8080; }
+            }
+            TMPCONF
+              nginx -t && systemctl reload nginx
+              certbot --nginx -d superadmin.jobtalk.ai --non-interactive --agree-tos -m ${{ secrets.CERTBOT_EMAIL }}
+              # Restore full SSL config
+              cp deployment/nginx-host.conf /etc/nginx/sites-available/superadmin.jobtalk.ai
+            fi
+
+            # Test and reload nginx (safe - only reloads if config is valid)
+            nginx -t && systemctl reload nginx
+
+            # Verify health
+            sleep 15
+            curl -f http://localhost:8001/health || echo "Health check pending..."
+
+            # Cleanup
+            rm -f image.tar.gz
+            docker image prune -f

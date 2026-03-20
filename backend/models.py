@@ -66,6 +66,13 @@ class SSHConfig(BaseModel):
     privateKey: Optional[str] = None  # SSH key authentication
     passphrase: Optional[str] = None  # Passphrase for private key
 
+class S3Config(BaseModel):
+    enabled: bool = False
+    accessKeyId: Optional[str] = None
+    secretAccessKey: Optional[str] = None
+    bucket: Optional[str] = None
+    region: str = "us-east-1"
+
 class PartnerConfigBase(BaseModel):
     partnerName: str
     tenantId: int = 0  # Made optional with default
@@ -76,6 +83,7 @@ class PartnerConfigBase(BaseModel):
     dbPassword: str
     dbType: str = "mysql"  # "mysql" or "mongodb"
     sshConfig: SSHConfig
+    s3Config: Optional[S3Config] = None
     concurrencyLimit: int = 10
     pauseNonPriorityCampaigns: bool = False
     isActive: bool = True
@@ -101,6 +109,7 @@ class PartnerConfigUpdate(BaseModel):
     dbUsername: Optional[str] = None
     dbPassword: Optional[str] = None
     sshConfig: Optional[SSHConfig] = None
+    s3Config: Optional[S3Config] = None
     concurrencyLimit: Optional[int] = None
     isActive: Optional[bool] = None
 
@@ -238,3 +247,65 @@ class TestConnectionResponse(BaseModel):
     message: str
     responseTimeMs: int
     details: Optional[Dict[str, Any]] = None
+
+# QA Models
+class QAAnalysisData(BaseModel):
+    aiVoiceQuality: Optional[int] = None
+    aiLatency: Optional[int] = None
+    aiConversationQuality: Optional[int] = None
+    aiNotes: Optional[str] = None
+    humanVoiceQuality: Optional[int] = None
+    humanLatency: Optional[int] = None
+    humanConversationQuality: Optional[int] = None
+    humanNotes: Optional[str] = None
+
+class QACallResponse(BaseModel):
+    id: int
+    tenantId: Optional[int] = None
+    duration: Optional[int] = None
+    status: Optional[str] = None
+    endReason: Optional[str] = None
+    recordingUrl: Optional[str] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    createdAt: Optional[str] = None
+    campaignName: Optional[str] = None
+    campaignId: Optional[int] = None
+    contactFirstName: Optional[str] = None
+    contactLastName: Optional[str] = None
+    contactPhone: Optional[str] = None
+    vmBeepAt: Optional[str] = None
+    qaAnalysis: Optional[QAAnalysisData] = None
+
+class QAReviewRequest(BaseModel):
+    humanVoiceQuality: int = Field(ge=1, le=10)
+    humanLatency: int = Field(ge=1, le=10)
+    humanConversationQuality: int = Field(ge=1, le=10)
+    humanNotes: Optional[str] = ""
+
+class QAAnalyzeRequest(BaseModel):
+    callIds: List[int]
+    maxAnalyze: Optional[int] = None
+
+class QAAnalysisJobStatus(str, Enum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class QAEmailReportCall(BaseModel):
+    id: int
+    duration: Optional[int] = None
+    campaignName: Optional[str] = None
+    contactFirstName: Optional[str] = None
+    contactLastName: Optional[str] = None
+    contactPhone: Optional[str] = None
+    qaAnalysis: Optional[QAAnalysisData] = None
+
+class QAEmailReportRequest(BaseModel):
+    calls: List[QAEmailReportCall]
+    scoreFilter: Optional[int] = None
+    date: str
+    cc: Optional[List[str]] = None
+    message: Optional[str] = None
+    partnerName: Optional[str] = None

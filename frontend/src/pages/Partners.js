@@ -40,6 +40,13 @@ function Partners() {
       privateKey: '',
       passphrase: '',
     },
+    s3Config: {
+      enabled: false,
+      accessKeyId: '',
+      secretAccessKey: '',
+      bucket: '',
+      region: 'us-east-1',
+    },
   });
 
   useEffect(() => {
@@ -86,6 +93,15 @@ function Partners() {
         }
         if (!submitData.sshConfig.passphrase || submitData.sshConfig.passphrase === '') {
           delete submitData.sshConfig.passphrase;
+        }
+        // Same for S3 sensitive fields
+        if (submitData.s3Config) {
+          if (!submitData.s3Config.accessKeyId || submitData.s3Config.accessKeyId === '') {
+            delete submitData.s3Config.accessKeyId;
+          }
+          if (!submitData.s3Config.secretAccessKey || submitData.s3Config.secretAccessKey === '') {
+            delete submitData.s3Config.secretAccessKey;
+          }
         }
       }
       
@@ -158,6 +174,13 @@ function Partners() {
         privateKey: '',
         passphrase: '',
       },
+      s3Config: {
+        enabled: false,
+        accessKeyId: '',
+        secretAccessKey: '',
+        bucket: '',
+        region: 'us-east-1',
+      },
     });
     setEditingPartner(null);
   };
@@ -179,6 +202,13 @@ function Partners() {
         password: '', // Don't show encrypted password
         privateKey: '', // Don't show encrypted key
         passphrase: '', // Don't show encrypted passphrase
+      },
+      s3Config: {
+        enabled: partner.s3Config?.enabled || false,
+        accessKeyId: '', // Don't show encrypted key
+        secretAccessKey: '', // Don't show encrypted secret
+        bucket: partner.s3Config?.bucket || '',
+        region: partner.s3Config?.region || 'us-east-1',
       },
     });
     setDialogOpen(true);
@@ -390,6 +420,78 @@ function Partners() {
                         className="bg-black/40 border-white/10 text-white"
                         placeholder={editingPartner ? "Enter new passphrase to update" : "Enter passphrase if key is encrypted"}
                       />
+                    </div>
+                  </div>
+                )}
+
+                {/* S3 / Recording Storage */}
+                <div className="border border-white/10 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={formData.s3Config.enabled}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, s3Config: { ...formData.s3Config, enabled: checked } })
+                      }
+                    />
+                    <Label className="text-gray-300">S3 Recording Storage</Label>
+                  </div>
+                </div>
+
+                {formData.s3Config.enabled && (
+                  <div className="border border-white/10 rounded-lg p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-gray-400 text-xs">
+                          Access Key ID {editingPartner && '(leave blank to keep current)'}
+                        </Label>
+                        <Input
+                          type="password"
+                          value={formData.s3Config.accessKeyId}
+                          onChange={(e) =>
+                            setFormData({ ...formData, s3Config: { ...formData.s3Config, accessKeyId: e.target.value } })
+                          }
+                          className="bg-black/40 border-white/10 text-white"
+                          placeholder={editingPartner ? "Enter new key to update" : "AKIA..."}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-gray-400 text-xs">
+                          Secret Access Key {editingPartner && '(leave blank to keep current)'}
+                        </Label>
+                        <Input
+                          type="password"
+                          value={formData.s3Config.secretAccessKey}
+                          onChange={(e) =>
+                            setFormData({ ...formData, s3Config: { ...formData.s3Config, secretAccessKey: e.target.value } })
+                          }
+                          className="bg-black/40 border-white/10 text-white"
+                          placeholder={editingPartner ? "Enter new secret to update" : "Secret access key"}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-gray-400 text-xs">Bucket Name</Label>
+                        <Input
+                          value={formData.s3Config.bucket}
+                          onChange={(e) =>
+                            setFormData({ ...formData, s3Config: { ...formData.s3Config, bucket: e.target.value } })
+                          }
+                          className="bg-black/40 border-white/10 text-white"
+                          placeholder="my-recordings-bucket"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-gray-400 text-xs">Region</Label>
+                        <Input
+                          value={formData.s3Config.region}
+                          onChange={(e) =>
+                            setFormData({ ...formData, s3Config: { ...formData.s3Config, region: e.target.value } })
+                          }
+                          className="bg-black/40 border-white/10 text-white"
+                          placeholder="us-east-1"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

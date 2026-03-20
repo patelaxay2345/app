@@ -8,6 +8,7 @@ import Partners from './pages/Partners';
 import Settings from './pages/Settings';
 import PartnerDetail from './pages/PartnerDetail';
 import PublicApiDocs from './pages/PublicApiDocs';
+import QAPage from './pages/QAPage';
 import './App.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -75,6 +76,14 @@ function App() {
             element={
               <PrivateRoute>
                 <PartnerDetail />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/qa"
+            element={
+              <PrivateRoute>
+                <QAPage />
               </PrivateRoute>
             }
           />

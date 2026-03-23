@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -31,7 +33,18 @@ function formatDuration(seconds) {
 }
 
 function isVoicemail(call) {
-  return call.endReason === 'voicemail-detected' || call.vmBeepAt;
+  return !!(call.endReason?.toLowerCase().includes('voicemail') || call.vmBeepAt);
+}
+
+function StatusBadge({ call }) {
+  if (isVoicemail(call)) {
+    return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/15 text-yellow-400">Voicemail</span>;
+  }
+  const r = (call.endReason || '').toUpperCase();
+  if (r === 'ANSWERED') return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-green-500/15 text-green-400">Completed</span>;
+  if (r === 'UNANSWERED') return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-500/15 text-gray-400">No Answer</span>;
+  if (r === 'WRONGNUMBER') return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-400">Wrong #</span>;
+  return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-500/15 text-gray-400">{call.endReason || call.status || '—'}</span>;
 }
 
 function QAPage() {
@@ -54,6 +67,7 @@ function QAPage() {
   const [completedOnly, setCompletedOnly] = useState(false);
   const [showBadOnly, setShowBadOnly] = useState(false);
   const [totalScoreThreshold, setTotalScoreThreshold] = useState(20);
+  const [maxAnalyze, setMaxAnalyze] = useState('');
 
   // Data
   const [calls, setCalls] = useState([]);
@@ -180,7 +194,11 @@ function QAPage() {
 
   // Run AI Analysis
   const handleAnalyze = async () => {
-    const unanalyzed = calls.filter((c) => {
+    const limit = maxAnalyze !== '' && parseInt(maxAnalyze, 10) > 0
+      ? parseInt(maxAnalyze, 10)
+      : calls.length;
+    const pool = calls.slice(0, limit);
+    const unanalyzed = pool.filter((c) => {
       const qa = c.qaAnalysis || {};
       return qa.aiVoiceQuality == null;
     });
@@ -384,29 +402,80 @@ function QAPage() {
     }
   };
 
-  // Audio playback via hidden Audio element
+  // Audio player state
   const audioRef = useRef(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [isAudioPaused, setIsAudioPaused] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [audioVolume, setAudioVolume] = useState(1);
+  const progressIntervalRef = useRef(null);
+
+  const formatTime = (secs) => {
+    if (!secs || !isFinite(secs)) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  const startProgressTracking = () => {
+    clearInterval(progressIntervalRef.current);
+    progressIntervalRef.current = setInterval(() => {
+      const audio = audioRef.current;
+      if (audio && audio.duration) {
+        setAudioCurrentTime(audio.currentTime);
+        setAudioProgress((audio.currentTime / audio.duration) * 100);
+      }
+    }, 250);
+  };
+
+  const destroyAudio = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    // Remove all listeners so the dying element can't fire stale events
+    audio.onloadedmetadata = null;
+    audio.onended = null;
+    audio.onerror = null;
+    // Don't set src='' — that triggers MEDIA_ELEMENT_ERROR on the old element.
+    // Just remove the reference; the browser will GC it.
+    audio.removeAttribute('src');
+    audio.load(); // reset internal state without triggering error
+    audioRef.current = null;
+  };
 
   const playAudio = (callId, url, contentType) => {
-    // Destroy previous instance to avoid stale state
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeAttribute('src');
-      audioRef.current = null;
-    }
+    destroyAudio();
+    clearInterval(progressIntervalRef.current);
+    setAudioProgress(0);
+    setAudioCurrentTime(0);
+    setAudioDuration(0);
 
     const audio = new Audio();
+    audio.preload = 'auto';
     audioRef.current = audio;
+    audio.volume = audioVolume;
+    audio.muted = isMuted;
 
-    audio.addEventListener('ended', () => setPlayingCallId(null));
-    audio.addEventListener('error', (e) => {
-      const err = e.target.error;
-      console.error('[QA-AUDIO] error event:', err?.code, err?.message, 'src:', url?.substring(0, 150));
+    audio.onloadedmetadata = () => setAudioDuration(audio.duration);
+    audio.onended = () => {
+      setPlayingCallId(null);
+      setIsAudioPaused(true);
+      setAudioProgress(100);
+      clearInterval(progressIntervalRef.current);
+    };
+    audio.onerror = () => {
+      // Ignore errors from a destroyed element (no src)
+      if (!audio.src && !audio.querySelector('source')) return;
+      const err = audio.error;
+      console.error('[QA-AUDIO] error:', err?.code, err?.message);
       toast.error('Failed to play recording');
       setPlayingCallId(null);
-    });
+      setIsAudioPaused(true);
+      clearInterval(progressIntervalRef.current);
+    };
 
-    // If we have a content type, use a source element for better format hinting
     if (contentType) {
       const source = document.createElement('source');
       source.src = url;
@@ -417,30 +486,74 @@ function QAPage() {
     }
 
     audio.load();
-    audio.play().catch((err) => {
-      console.error('[QA-AUDIO] play() rejected:', err.message, 'url:', url?.substring(0, 150));
-      // toast.error('Failed to play recording');
-      setPlayingCallId(null);
-    });
+
+    // Wait for enough data before calling play() to avoid interruption race
+    const attemptPlay = () => {
+      audio.play().then(() => {
+        setIsAudioPaused(false);
+        startProgressTracking();
+      }).catch((err) => {
+        // AbortError = play() interrupted by pause/new load — safe to ignore
+        if (err.name === 'AbortError') return;
+        console.error('[QA-AUDIO] play() failed:', err.message);
+        setPlayingCallId(null);
+        setIsAudioPaused(true);
+      });
+    };
+
+    if (audio.readyState >= 2) {
+      attemptPlay();
+    } else {
+      audio.oncanplay = () => {
+        audio.oncanplay = null;
+        attemptPlay();
+      };
+    }
+
     setPlayingCallId(callId);
+    setIsAudioPaused(false);
   };
 
   const stopAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-    }
+    destroyAudio();
     setPlayingCallId(null);
+    setIsAudioPaused(true);
+    clearInterval(progressIntervalRef.current);
+    setAudioProgress(0);
+    setAudioCurrentTime(0);
+    setAudioDuration(0);
+  };
+
+  const handleSeek = (e) => {
+    const audio = audioRef.current;
+    if (!audio || !audio.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, x / rect.width));
+    audio.currentTime = pct * audio.duration;
+    setAudioCurrentTime(audio.currentTime);
+    setAudioProgress(pct * 100);
+  };
+
+  const toggleMute = () => {
+    const next = !isMuted;
+    setIsMuted(next);
+    if (audioRef.current) audioRef.current.muted = next;
+  };
+
+  const handleVolumeChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setAudioVolume(val);
+    if (audioRef.current) audioRef.current.volume = val;
+    if (val === 0) setIsMuted(true);
+    else if (isMuted) setIsMuted(false);
   };
 
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-        audioRef.current = null;
-      }
+      clearInterval(progressIntervalRef.current);
+      destroyAudio();
     };
   }, []);
 
@@ -471,7 +584,7 @@ function QAPage() {
       return;
     }
 
-    // Fetch presigned URL on demand
+    // Get a direct-playable URL (public URL as-is, or presigned for private S3)
     setLoadingAudioId(call.id);
     try {
       const res = await axios.get(
@@ -482,6 +595,7 @@ function QAPage() {
       setPresignedUrls((prev) => ({ ...prev, [call.id]: { url: presignedUrl, contentType } }));
       playAudio(call.id, presignedUrl, contentType);
     } catch (err) {
+      console.log("Failed to load recording:", err)
       toast.error(err.response?.data?.detail || 'Failed to load recording');
     } finally {
       setLoadingAudioId(null);
@@ -638,6 +752,20 @@ function QAPage() {
                 {visibleCalls.length} of {calls.length} calls
               </span>
 
+              {/* Max to analyze */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">Max analyze</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={maxAnalyze}
+                  onChange={(e) => setMaxAnalyze(e.target.value === '' ? '' : e.target.value)}
+                  placeholder="All"
+                  className="w-16 h-8 text-xs bg-black/40 border-white/10 text-white"
+                />
+              </div>
+
               {/* Action buttons */}
               <Button
                 size="sm"
@@ -741,6 +869,7 @@ function QAPage() {
                     <th className="text-left px-4 py-3 text-gray-400 font-medium">Contact</th>
                     <th className="text-left px-4 py-3 text-gray-400 font-medium">Campaign</th>
                     <th className="text-center px-3 py-3 text-gray-400 font-medium">Duration</th>
+                    <th className="text-center px-3 py-3 text-gray-400 font-medium">Status</th>
                     <th className="text-center px-3 py-3 text-gray-400 font-medium" colSpan={3}>
                       <span className="text-blue-400">AI Scores</span>
                     </th>
@@ -754,6 +883,7 @@ function QAPage() {
                     <th className="px-4 py-1" />
                     <th className="px-4 py-1" />
                     <th className="px-4 py-1" />
+                    <th className="px-3 py-1" />
                     <th className="px-3 py-1" />
                     <th className="px-2 py-1 text-center text-[10px] text-blue-400/70 font-normal">Voice</th>
                     <th className="px-2 py-1 text-center text-[10px] text-blue-400/70 font-normal">Latency</th>
@@ -787,9 +917,9 @@ function QAPage() {
                           </td>
                           <td className="px-3 py-3 text-center text-gray-300 text-xs">
                             {formatDuration(call.duration)}
-                            {vm && (
-                              <span className="ml-1 text-[10px] text-yellow-500">VM</span>
-                            )}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            <StatusBadge call={call} />
                           </td>
                           {/* AI Scores */}
                           <td className="px-2 py-3 text-center">
@@ -817,7 +947,7 @@ function QAPage() {
                           </td>
                           {/* Actions */}
                           <td className="px-3 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-between gap-1">
                               <button
                                 onClick={() => openReview(call)}
                                 title="Human Review"
@@ -844,6 +974,91 @@ function QAPage() {
                             </div>
                           </td>
                         </tr>
+                        {/* Audio player track row */}
+                        {playingCallId === call.id && (
+                          <tr className="border-b border-white/5 bg-white/[0.02]">
+                            <td colSpan={13} className="px-4 py-2">
+                              <div className="flex items-center gap-3">
+                                {/* Play / Pause */}
+                                <button
+                                  onClick={() => {
+                                    const audio = audioRef.current;
+                                    if (!audio) return;
+                                    if (audio.paused) {
+                                      audio.play();
+                                      setIsAudioPaused(false);
+                                      startProgressTracking();
+                                    } else {
+                                      audio.pause();
+                                      setIsAudioPaused(true);
+                                      clearInterval(progressIntervalRef.current);
+                                    }
+                                  }}
+                                  className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 flex items-center justify-center transition-colors"
+                                >
+                                  {!isAudioPaused ? (
+                                    <Pause className="w-4 h-4" />
+                                  ) : (
+                                    <Play className="w-4 h-4 ml-0.5" />
+                                  )}
+                                </button>
+
+                                {/* Current time */}
+                                <span className="text-xs text-gray-400 font-mono w-10 text-right flex-shrink-0">
+                                  {formatTime(audioCurrentTime)}
+                                </span>
+
+                                {/* Progress bar */}
+                                <div
+                                  className="flex-1 h-2 bg-white/10 rounded-full cursor-pointer group relative"
+                                  onClick={handleSeek}
+                                >
+                                  <div
+                                    className="h-full bg-green-500 rounded-full relative transition-[width] duration-200"
+                                    style={{ width: `${audioProgress}%` }}
+                                  >
+                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+                                  </div>
+                                </div>
+
+                                {/* Duration */}
+                                <span className="text-xs text-gray-500 font-mono w-10 flex-shrink-0">
+                                  {formatTime(audioDuration)}
+                                </span>
+
+                                {/* Volume */}
+                                <button
+                                  onClick={toggleMute}
+                                  className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
+                                >
+                                  {isMuted || audioVolume === 0 ? (
+                                    <VolumeX className="w-4 h-4" />
+                                  ) : (
+                                    <Volume2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="1"
+                                  step="0.05"
+                                  value={isMuted ? 0 : audioVolume}
+                                  onChange={handleVolumeChange}
+                                  className="w-16 h-1 accent-green-500 flex-shrink-0"
+                                />
+
+                                {/* Stop / Close */}
+                                <button
+                                  onClick={() => stopAudio()}
+                                  className="flex-shrink-0 text-gray-500 hover:text-red-400 text-xs transition-colors"
+                                  title="Stop"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </React.Fragment>
                     );
                   })}

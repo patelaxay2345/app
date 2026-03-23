@@ -497,9 +497,12 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
     
     update_dict = partner_update.model_dump(exclude_unset=True)
     
-    # Encrypt sensitive fields if provided
-    if 'dbPassword' in update_dict and update_dict['dbPassword']:
-        update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
+    # Encrypt dbPassword if a new value was provided; otherwise preserve existing
+    if 'dbPassword' in update_dict:
+        if update_dict['dbPassword']:
+            update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
+        else:
+            del update_dict['dbPassword']
     
     # Handle SSH config updates carefully - merge with existing config to avoid losing credentials
     if 'sshConfig' in update_dict:
@@ -1984,7 +1987,10 @@ async def stream_qa_analysis(
 @api_router.get(
     "/partners/{partner_id}/qa/presigned-url",
     tags=["QA"],
-    summary="Generate presigned URL for a private S3 recording",
+    summary="Get a playable URL for a private S3 recording",
+    description="Returns a direct-playable URL for the browser's <audio> element. "
+                "Public recordings (amazonaws.com) are returned as-is. "
+                "Private recordings (Linode, etc.) get a time-limited presigned URL.",
 )
 async def get_presigned_url(
     partner_id: str,
@@ -1999,7 +2005,7 @@ async def get_presigned_url(
     if not s3_config or not s3_config.get("enabled"):
         raise HTTPException(status_code=400, detail="S3 not configured for this partner")
 
-    result = s3_service.generate_presigned_url(s3_config, url)
+    result = s3_service.get_playable_url(s3_config, url)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
 
@@ -2410,9 +2416,11 @@ async def startup_event():
             setting['updatedAt'] = datetime.now(timezone.utc).isoformat()
             await db.system_settings.insert_one(setting)
     
-    # Start data fetch scheduler
-    data_fetch_service.start_scheduler()
-    logger.info("Data fetch scheduler started")
+    # TODO: Re-enable after QA page functionality is complete
+    # # Start data fetch scheduler
+    # data_fetch_service.start_scheduler()
+    # logger.info("Data fetch scheduler started")
+    logger.info("Data fetch scheduler SKIPPED (temporarily disabled for QA testing)")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

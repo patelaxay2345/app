@@ -84,7 +84,10 @@ function Partners() {
       const submitData = { ...formData };
       
       if (editingPartner) {
-        // When editing, only include SSH sensitive fields if user entered new values
+        // When editing, only include sensitive fields if user entered new values
+        if (!submitData.dbPassword || submitData.dbPassword === '') {
+          delete submitData.dbPassword;
+        }
         if (!submitData.sshConfig.password || submitData.sshConfig.password === '') {
           delete submitData.sshConfig.password;
         }

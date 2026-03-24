@@ -2416,11 +2416,9 @@ async def startup_event():
             setting['updatedAt'] = datetime.now(timezone.utc).isoformat()
             await db.system_settings.insert_one(setting)
     
-    # TODO: Re-enable after QA page functionality is complete
-    # # Start data fetch scheduler
-    # data_fetch_service.start_scheduler()
-    # logger.info("Data fetch scheduler started")
-    logger.info("Data fetch scheduler SKIPPED (temporarily disabled for QA testing)")
+    # Start data fetch scheduler
+    data_fetch_service.start_scheduler()
+    logger.info("Data fetch scheduler started")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

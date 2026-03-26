@@ -328,25 +328,25 @@ class DataFetchService:
             
             remaining_calls = results[5][0]['count'] if results[5] and len(results[5]) > 0 else 0
 
-            # Extract pauseAllCampaigns setting
+            # Extract pauseAllCampaigns setting (index 7)
             pause_all_campaigns = False
             try:
-                if results[8] and len(results[8]) > 0:
-                    raw_val = results[8][0].get('value', '0')
+                if results[7] and len(results[7]) > 0:
+                    raw_val = results[7][0].get('value', '0')
                     pause_all_campaigns = str(raw_val).strip().lower() in ('1', 'true', 'yes')
             except Exception:
                 pass
 
-            # Debug: Log recent campaigns data with timezone info
-            if results[9] and len(results[9]) > 0:
+            # Debug: Log recent campaigns data with timezone info (index 8)
+            if results[8] and len(results[8]) > 0:
                 logger.info(f"Recent campaigns for {partner.partnerName}:")
-                logger.info(f"  Today EST: {results[9][0]['today_est']}, Current EST: {results[9][0]['current_est']}")
-                for campaign in results[9][:5]:  # Show first 5 campaigns
+                logger.info(f"  Today EST: {results[8][0]['today_est']}, Current EST: {results[8][0]['current_est']}")
+                for campaign in results[8][:5]:  # Show first 5 campaigns
                     logger.info(f"  Campaign {campaign['id']}: Created UTC: {campaign['createdAt']}, Date UTC: {campaign['creation_date_utc']}, Date EST: {campaign['creation_date_est']}, Status: {campaign['status']}, Deleted: {campaign['deleted']}")
                 
                 # Count campaigns created today in EST
-                today_est = results[9][0]['today_est']
-                campaigns_today_debug = sum(1 for c in results[9] if c['creation_date_est'] == today_est and c['deleted'] == 0)
+                today_est = results[8][0]['today_est']
+                campaigns_today_debug = sum(1 for c in results[8] if c['creation_date_est'] == today_est and c['deleted'] == 0)
                 logger.info(f"  Debug count of campaigns today (EST): {campaigns_today_debug} (vs query result: {campaigns_today})")
             else:
                 logger.info(f"No recent campaigns found for {partner.partnerName}")

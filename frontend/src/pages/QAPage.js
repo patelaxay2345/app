@@ -330,7 +330,16 @@ function QAPage() {
     };
     checkRunningAnalysis();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Tear down SSE and reset analysis UI when partner changes
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setAnalyzing(false);
+      setAnalysisProgress(null);
+    };
   }, [selectedPartnerId, connectToSSE]);
 
   // Human review

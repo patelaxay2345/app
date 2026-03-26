@@ -87,6 +87,8 @@ class PartnerConfigBase(BaseModel):
     concurrencyLimit: int = 10
     pauseNonPriorityCampaigns: bool = False
     isActive: bool = True
+    priority: int = Field(default=4, ge=1, le=4)  # 1=highest, 4=lowest
+    maxConcurrency: int = Field(default=50, ge=1)  # hard ceiling per client
 
 class PartnerConfigCreate(PartnerConfigBase):
     pass
@@ -112,6 +114,8 @@ class PartnerConfigUpdate(BaseModel):
     s3Config: Optional[S3Config] = None
     concurrencyLimit: Optional[int] = None
     isActive: Optional[bool] = None
+    priority: Optional[int] = Field(default=None, ge=1, le=4)
+    maxConcurrency: Optional[int] = Field(default=None, ge=1)
 
 # System Settings Models
 class SystemSetting(BaseModel):
@@ -218,6 +222,49 @@ class AlertSummary(BaseModel):
     high: int
     medium: int
     offline: int
+
+# Concurrency Allocation Settings
+class TierWeights(BaseModel):
+    p1: int = Field(default=40, ge=1)
+    p2: int = Field(default=30, ge=1)
+    p3: int = Field(default=20, ge=1)
+    p4: int = Field(default=10, ge=1)
+
+class ConcurrencyAllocationSettings(BaseModel):
+    globalMaxConcurrency: int = Field(default=200, ge=1)
+    tierWeights: TierWeights = Field(default_factory=TierWeights)
+    minConcurrencyPerClient: int = Field(default=2, ge=1)
+    allocationIntervalSeconds: int = Field(default=60, ge=10)
+
+class ConcurrencyAllocationSettingsUpdate(BaseModel):
+    globalMaxConcurrency: Optional[int] = Field(default=None, ge=1)
+    tierWeights: Optional[TierWeights] = None
+    minConcurrencyPerClient: Optional[int] = Field(default=None, ge=1)
+    allocationIntervalSeconds: Optional[int] = Field(default=None, ge=10)
+
+# Allocation Run Audit Log
+class AllocationRunEntry(BaseModel):
+    partnerId: str
+    partnerName: str
+    priority: int
+    tierPool: float
+    maxConcurrency: int
+    oldLimit: int
+    newLimit: int
+    remainingContacts: int
+    activeCalls: int
+    syncedToPartner: bool = False
+    syncError: Optional[str] = None
+
+class AllocationRun(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    runAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    globalMax: int
+    totalInFlight: int
+    availableSlots: int
+    status: str  # "normal" | "saturated" | "no_active_clients"
+    allocations: List[AllocationRunEntry] = []
 
 # Campaign Models
 class Campaign(BaseModel):

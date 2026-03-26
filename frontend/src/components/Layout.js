@@ -15,6 +15,7 @@ function Layout({ children }) {
   const navItems = [
     { path: '/', icon: Home, label: 'Dashboard' },
     { path: '/partners', icon: Users, label: 'Partners' },
+    { path: '/concurrency', icon: Activity, label: 'Concurrency' },
     { path: '/qa', icon: ClipboardCheck, label: 'QA' },
     { path: '/settings', icon: SettingsIcon, label: 'Settings' },
   ];

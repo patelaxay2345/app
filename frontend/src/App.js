@@ -8,6 +8,7 @@ import Partners from './pages/Partners';
 import Settings from './pages/Settings';
 import PartnerDetail from './pages/PartnerDetail';
 import PublicApiDocs from './pages/PublicApiDocs';
+import ConcurrencyAllocation from './pages/ConcurrencyAllocation';
 import QAPage from './pages/QAPage';
 import './App.css';
 
@@ -80,10 +81,18 @@ function App() {
             }
           />
           <Route
-            path="/qa"
+            path="/concurrency"
             element={
               <PrivateRoute>
                 <QAPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/concurrency"
+            element={
+              <PrivateRoute>
+                <ConcurrencyAllocation />
               </PrivateRoute>
             }
           />

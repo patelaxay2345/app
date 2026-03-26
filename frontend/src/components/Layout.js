@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, Settings as SettingsIcon, LogOut, ClipboardCheck } from 'lucide-react';
+import { Home, Users, Settings as SettingsIcon, LogOut, ClipboardCheck, Activity } from 'lucide-react';
 
 function Layout({ children }) {
   const navigate = useNavigate();

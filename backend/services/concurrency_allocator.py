@@ -524,7 +524,7 @@ class ConcurrencyAllocator:
         for pid in partner_ids:
             doc = await self.db.dashboard_snapshots.find_one(
                 {"partnerId": pid},
-                {"_id": 0, "activeCalls": 1, "queuedCalls": 1, "remainingCalls": 1},
+                {"_id": 0, "activeCalls": 1, "queuedCalls": 1, "remainingCalls": 1, "pauseAllCampaigns": 1},
                 sort=[("snapshotTime", -1)],
             )
             snapshots[pid] = doc or {}

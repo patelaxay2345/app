@@ -19,6 +19,7 @@ from services.encryption import EncryptionService
 from services.ssh_connection import SSHConnectionService
 from services.data_fetch import DataFetchService
 from services.concurrency import ConcurrencyService
+from services.concurrency_allocator import ConcurrencyAllocator
 from services.alert import AlertService
 from services.email_service import EmailService
 
@@ -89,9 +90,10 @@ api_router = APIRouter(prefix="/api")
 encryption_service = EncryptionService()
 ssh_service = SSHConnectionService(db, encryption_service)
 concurrency_service = ConcurrencyService(db, ssh_service)
+concurrency_allocator = ConcurrencyAllocator(db, ssh_service)
 email_service = EmailService()
 alert_service = AlertService(db, email_service)
-data_fetch_service = DataFetchService(db, ssh_service, alert_service)
+data_fetch_service = DataFetchService(db, ssh_service, alert_service, allocator=concurrency_allocator)
 
 # Configure logging
 logging.basicConfig(
@@ -834,6 +836,41 @@ async def refresh_dashboard(current_user: User = Depends(get_current_user)):
     return {"message": "Dashboard refresh completed"}
 
 # ============= Concurrency Management Routes =============
+
+# NOTE: Specific literal paths must be registered BEFORE parameterized paths
+# to avoid Starlette returning 405 when a parameterized path matches first.
+
+@api_router.post(
+    "/concurrency/allocate-now",
+    tags=["Concurrency Management"],
+    summary="Manually trigger a concurrency allocation cycle",
+)
+async def trigger_allocation_now(current_user: User = Depends(get_current_user)):
+    run = await concurrency_allocator.run_allocation_cycle()
+    return {
+        "message": "Allocation cycle completed",
+        "status": run.status,
+        "availableSlots": run.availableSlots,
+        "totalInFlight": run.totalInFlight,
+        "clientsUpdated": len(run.allocations),
+    }
+
+
+@api_router.get(
+    "/concurrency/allocation-history",
+    tags=["Concurrency Management"],
+    summary="Get recent allocation run history",
+)
+async def get_allocation_history(
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+):
+    runs = await db.allocation_runs.find(
+        {}, {"_id": 0}
+    ).sort("runAt", -1).limit(limit).to_list(limit)
+    return runs
+
+
 @api_router.post(
     "/partners/{partner_id}/concurrency",
     tags=["Concurrency Management"],
@@ -1087,6 +1124,51 @@ async def calculate_suggested_concurrency(partner_id: str, current_user: User = 
         "suggested": suggested,
         "reason": f"Based on {queued} queued calls, {running} running campaigns, {active} active calls"
     }
+
+# ============= Concurrency Allocation Settings Routes =============
+
+@api_router.get(
+    "/settings/concurrency-allocation",
+    tags=["Concurrency Management"],
+    summary="Get concurrency allocation settings",
+)
+async def get_concurrency_allocation_settings(current_user: User = Depends(get_current_user)):
+    settings = await concurrency_allocator._load_settings()
+    return settings.model_dump()
+
+
+@api_router.put(
+    "/settings/concurrency-allocation",
+    tags=["Concurrency Management"],
+    summary="Update concurrency allocation settings",
+)
+async def update_concurrency_allocation_settings(
+    update: ConcurrencyAllocationSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    settings = await concurrency_allocator._load_settings()
+    updated = settings.model_dump()
+
+    if update.globalMaxConcurrency is not None:
+        updated["globalMaxConcurrency"] = update.globalMaxConcurrency
+    if update.tierWeights is not None:
+        weights = update.tierWeights.model_dump()
+        total = sum(weights.values())
+        if total != 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"tierWeights must sum to 100, got {total}"
+            )
+        updated["tierWeights"] = weights
+    if update.minConcurrencyPerClient is not None:
+        updated["minConcurrencyPerClient"] = update.minConcurrencyPerClient
+    if update.allocationIntervalSeconds is not None:
+        updated["allocationIntervalSeconds"] = update.allocationIntervalSeconds
+
+    new_settings = ConcurrencyAllocationSettings(**updated)
+    await concurrency_allocator.save_settings(new_settings)
+    return {"message": "Settings updated successfully", "settings": new_settings.model_dump()}
+
 
 # ============= Alert Routes =============
 @api_router.get(
@@ -2089,6 +2171,13 @@ async def startup_event():
             setting['updatedAt'] = datetime.now(timezone.utc).isoformat()
             await db.system_settings.insert_one(setting)
     
+    # Ensure TTL index on allocation_runs so logs auto-expire after 30 days
+    await db.allocation_runs.create_index(
+        "runAt",
+        expireAfterSeconds=30 * 24 * 3600,
+        name="allocation_runs_ttl"
+    )
+
     # Start data fetch scheduler
     data_fetch_service.start_scheduler()
     logger.info("Data fetch scheduler started")

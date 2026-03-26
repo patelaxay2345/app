@@ -12,10 +12,11 @@ import pytz
 logger = logging.getLogger(__name__)
 
 class DataFetchService:
-    def __init__(self, db, ssh_service: SSHConnectionService, alert_service: AlertService):
+    def __init__(self, db, ssh_service: SSHConnectionService, alert_service: AlertService, allocator=None):
         self.db = db
         self.ssh_service = ssh_service
         self.alert_service = alert_service
+        self.allocator = allocator
         self.scheduler = AsyncIOScheduler()
         self.is_running = False
     
@@ -35,11 +36,11 @@ class DataFetchService:
     def start_scheduler(self):
         """Start scheduled data fetching"""
         if not self.is_running:
-            # Schedule job every 2 minutes
+            # Schedule job every 60 seconds
             self.scheduler.add_job(
                 self.fetch_all_partners,
                 'interval',
-                seconds=120,
+                seconds=60,
                 id='fetch_dashboard_data',
                 replace_existing=True
             )
@@ -98,7 +99,14 @@ class DataFetchService:
             await self._check_stale_snapshots()
             
             logger.info(f"Sync completed: {len(successful)} success, {len(failed)} failed")
-        
+
+            # Run concurrency allocation after fresh data is available
+            if self.allocator:
+                try:
+                    await self.allocator.run_allocation_cycle()
+                except Exception as alloc_err:
+                    logger.error(f"Concurrency allocation failed: {alloc_err}")
+
         except Exception as e:
             logger.error(f"Critical sync error: {str(e)}")
             await self._create_critical_alert(str(e))

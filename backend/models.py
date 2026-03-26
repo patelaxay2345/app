@@ -102,6 +102,24 @@ class PartnerConfig(PartnerConfigBase):
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class PartnerConfigSafe(BaseModel):
+    """Partner config without sensitive fields — safe for frontend responses."""
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    partnerName: str
+    tenantId: int = 0
+    dbType: str = "mysql"
+    concurrencyLimit: int = 10
+    pauseNonPriorityCampaigns: bool = False
+    isActive: bool = True
+    priority: int = 4
+    maxConcurrency: int = 50
+    lastSyncAt: Optional[datetime] = None
+    lastSyncStatus: SyncStatus = SyncStatus.NEVER_SYNCED
+    lastErrorMessage: Optional[str] = None
+    createdAt: Optional[datetime] = None
+    updatedAt: Optional[datetime] = None
+
 class PartnerConfigUpdate(BaseModel):
     partnerName: Optional[str] = None
     tenantId: Optional[int] = None
@@ -215,7 +233,7 @@ class DashboardOverview(BaseModel):
     lastUpdatedEST: Optional[datetime] = None
 
 class PartnerDashboardData(BaseModel):
-    partner: PartnerConfig
+    partner: PartnerConfigSafe
     snapshot: Optional[DashboardSnapshot] = None
 
 class AlertSummary(BaseModel):

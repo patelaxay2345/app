@@ -346,30 +346,25 @@ async def change_password(
 # ============= Partner Management Routes =============
 @api_router.get(
     "/partners",
-    response_model=List[PartnerConfig],
+    response_model=List[PartnerConfigSafe],
     tags=["Partner Management"],
     summary="Get all partners",
     description="""
     Retrieve a list of all partner configurations.
-    
+
     **Authentication Required:** Yes
-    
+
     **Returns:**
-    - List of all partners with their configurations
-    - Includes database connection details
-    - SSH configuration (credentials are encrypted)
-    - Active/inactive status
-    
-    **Note:** Sensitive fields (passwords, SSH keys) are returned encrypted.
+    - List of all partners (sensitive fields excluded)
     """
 )
 async def get_partners(current_user: User = Depends(get_current_user)):
     partners = await db.partner_configs.find({}, {"_id": 0}).to_list(1000)
-    return partners
+    return [PartnerConfigSafe(**p) for p in partners]
 
 @api_router.post(
     "/partners",
-    response_model=PartnerConfig,
+    response_model=PartnerConfigSafe,
     tags=["Partner Management"],
     summary="Create new partner",
     description="""
@@ -436,38 +431,28 @@ async def create_partner(partner_input: PartnerConfigCreate, current_user: User 
         partner_dict['lastSyncAt'] = partner_dict['lastSyncAt'].isoformat()
     
     await db.partner_configs.insert_one(partner_dict)
-    return partner
+    return PartnerConfigSafe(**partner.model_dump())
 
 @api_router.get(
     "/partners/{partner_id}",
-    response_model=PartnerConfig,
+    response_model=PartnerConfigSafe,
     tags=["Partner Management"],
     summary="Get partner by ID",
     description="""
-    Retrieve detailed configuration for a specific partner.
-    
+    Retrieve configuration for a specific partner (sensitive fields excluded).
+
     **Authentication Required:** Yes
-    
-    **Parameters:**
-    - partner_id: UUID of the partner
-    
-    **Returns:**
-    - Complete partner configuration
-    - Encrypted sensitive fields
-    
-    **Errors:**
-    - 404: Partner not found
     """
 )
 async def get_partner(partner_id: str, current_user: User = Depends(get_current_user)):
     partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
     if not partner_data:
         raise HTTPException(status_code=404, detail="Partner not found")
-    return PartnerConfig(**partner_data)
+    return PartnerConfigSafe(**partner_data)
 
 @api_router.put(
     "/partners/{partner_id}",
-    response_model=PartnerConfig,
+    response_model=PartnerConfigSafe,
     tags=["Partner Management"],
     summary="Update partner",
     description="""
@@ -550,7 +535,7 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
     await db.partner_configs.update_one({"id": partner_id}, {"$set": update_dict})
     
     updated_partner = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
-    return PartnerConfig(**updated_partner)
+    return PartnerConfigSafe(**updated_partner)
 
 @api_router.delete(
     "/partners/{partner_id}",
@@ -841,7 +826,7 @@ async def get_dashboard_partners(current_user: User = Depends(get_current_user))
         , sort=[("snapshotTime", -1)])
         
         result.append(PartnerDashboardData(
-            partner=PartnerConfig(**partner),
+            partner=PartnerConfigSafe(**partner),
             snapshot=DashboardSnapshot(**snapshot) if snapshot else None
         ))
     

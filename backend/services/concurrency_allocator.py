@@ -98,11 +98,13 @@ class ConcurrencyAllocator:
             4: settings.tierWeights.p4,
         }
 
-        # Group partners by priority — only include those with demand
+        # Group partners by priority — only include those with demand and not paused
         tier_clients: Dict[int, List[PartnerConfig]] = {1: [], 2: [], 3: [], 4: []}
         for p in partners:
-            remaining = snapshots.get(p.id, {}).get("remainingCalls", 0)
-            if remaining > 0:
+            snap = snapshots.get(p.id, {})
+            remaining = snap.get("remainingCalls", 0)
+            paused = snap.get("pauseAllCampaigns", False)
+            if remaining > 0 and not paused:
                 tier_clients[p.priority].append(p)
 
         # Compute tier pools based on active tiers only (renormalize)
@@ -445,29 +447,39 @@ class ConcurrencyAllocator:
     ) -> dict:
         """Sync concurrency limit to partner MySQL. Returns {success, error}."""
         try:
-            update_query = "UPDATE settings SET value = %s WHERE name = 'callConcurrency'"
-            affected = await self.ssh_service.execute_update(
-                partner, update_query, (new_limit,)
-            )
-            if affected > 0:
-                try:
-                    audit_query = (
-                        "INSERT INTO settings_auditlogs (userid, oldvalue, newvalue, createdat) "
-                        "VALUES (9999999999, %s, %s, NOW())"
-                    )
-                    await self.ssh_service.execute_update(
-                        partner, audit_query, (old_limit, new_limit)
-                    )
-                except Exception:
-                    pass  # audit log failure is non-fatal
-                logger.info(
-                    f"Synced concurrency {new_limit} to partner {partner.partnerName}"
-                )
-                return {"success": True}
-            else:
-                msg = f"No rows updated — callConcurrency setting may not exist in {partner.partnerName}"
+            # First verify the setting row exists
+            check_query = "SELECT value FROM settings WHERE name = 'callConcurrency'"
+            rows = await self.ssh_service.execute_query(partner, check_query)
+            if not rows:
+                msg = f"callConcurrency setting does not exist in {partner.partnerName}"
                 logger.warning(msg)
                 return {"success": False, "error": msg}
+
+            current_value = int(rows[0].get("value", 0))
+            if current_value == new_limit:
+                logger.info(
+                    f"Concurrency already {new_limit} in {partner.partnerName}, no update needed"
+                )
+                return {"success": True}
+
+            update_query = "UPDATE settings SET value = %s WHERE name = 'callConcurrency'"
+            await self.ssh_service.execute_update(
+                partner, update_query, (new_limit,)
+            )
+            try:
+                audit_query = (
+                    "INSERT INTO settings_auditlogs (userid, oldvalue, newvalue, createdat) "
+                    "VALUES (9999999999, %s, %s, NOW())"
+                )
+                await self.ssh_service.execute_update(
+                    partner, audit_query, (old_limit, new_limit)
+                )
+            except Exception:
+                pass  # audit log failure is non-fatal
+            logger.info(
+                f"Synced concurrency {new_limit} to partner {partner.partnerName}"
+            )
+            return {"success": True}
         except Exception as e:
             logger.error(f"SSH sync failed for {partner.partnerName}: {e}")
             return {"success": False, "error": str(e)}

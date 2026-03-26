@@ -140,6 +140,7 @@ class DashboardSnapshot(BaseModel):
     voicemailCount: int = 0
     customerEndedCount: int = 0
     remainingCalls: int = 0
+    pauseAllCampaigns: bool = False
     concurrencyLimit: int = 10
     utilizationPercent: float = 0.0
     alertLevel: AlertLevel = AlertLevel.NORMAL

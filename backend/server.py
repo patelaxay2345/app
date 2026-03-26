@@ -1208,6 +1208,17 @@ async def update_concurrency_allocation_settings(
 
     new_settings = ConcurrencyAllocationSettings(**updated)
     await concurrency_allocator.save_settings(new_settings)
+
+    # Reschedule the data fetch if interval changed
+    if update.allocationIntervalSeconds is not None:
+        new_interval = new_settings.allocationIntervalSeconds
+        data_fetch_service.scheduler.reschedule_job(
+            'fetch_dashboard_data',
+            trigger='interval',
+            seconds=new_interval,
+        )
+        logger.info(f"Rescheduled data fetch interval to {new_interval}s")
+
     return {"message": "Settings updated successfully", "settings": new_settings.model_dump()}
 
 
@@ -2505,9 +2516,11 @@ async def startup_event():
         name="allocation_runs_ttl"
     )
 
-    # Start data fetch scheduler
-    data_fetch_service.start_scheduler()
-    logger.info("Data fetch scheduler started")
+    # Start data fetch scheduler with configurable interval
+    settings = await concurrency_allocator._load_settings()
+    interval = settings.allocationIntervalSeconds
+    data_fetch_service.start_scheduler(interval_seconds=interval)
+    logger.info(f"Data fetch scheduler started (interval={interval}s)")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

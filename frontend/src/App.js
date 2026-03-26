@@ -81,7 +81,7 @@ function App() {
             }
           />
           <Route
-            path="/concurrency"
+            path="/qa"
             element={
               <PrivateRoute>
                 <QAPage />

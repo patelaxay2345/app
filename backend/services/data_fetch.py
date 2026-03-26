@@ -33,24 +33,23 @@ class DataFetchService:
         est_tz = pytz.timezone('America/New_York')
         return utc_datetime.astimezone(est_tz)
     
-    def start_scheduler(self):
+    def start_scheduler(self, interval_seconds: int = 60):
         """Start scheduled data fetching"""
         if not self.is_running:
-            # Schedule job every 60 seconds
             self.scheduler.add_job(
                 self.fetch_all_partners,
                 'interval',
-                seconds=60,
+                seconds=interval_seconds,
                 id='fetch_dashboard_data',
                 replace_existing=True
             )
             self.scheduler.start()
             self.is_running = True
-            logger.info("Data fetch scheduler started")
-            
+            logger.info(f"Data fetch scheduler started (interval={interval_seconds}s)")
+
             # Run immediately on startup
             asyncio.create_task(self.fetch_all_partners())
-            
+
             # Schedule stale data check every 5 minutes
             self.scheduler.add_job(
                 self._check_stale_snapshots,
@@ -146,6 +145,7 @@ class DataFetchService:
                     voicemailCount=metrics.get('voicemailCount', 0) or 0,
                     customerEndedCount=metrics.get('customerEndedCount', 0) or 0,
                     remainingCalls=metrics.get('remainingCalls', 0),
+                    pauseAllCampaigns=metrics.get('pauseAllCampaigns', False),
                     concurrencyLimit=partner.concurrencyLimit,
                     utilizationPercent=round(utilization, 2),
                     alertLevel=alert_level,
@@ -286,7 +286,12 @@ class DataFetchService:
                     'query': "SELECT value FROM settings WHERE name = 'callConcurrency'",
                     'params': None
                 },
-                # Query 8: Debug - Recent campaigns with dates and timezone conversion
+                # Query 8: pauseAllCampaigns setting
+                {
+                    'query': "SELECT value FROM settings WHERE name = 'pauseAllCampaigns'",
+                    'params': None
+                },
+                # Query 9: Debug - Recent campaigns with dates and timezone conversion
                 {
                     'query': """
                         SELECT id, name, status, createdAt, deleted,
@@ -322,17 +327,26 @@ class DataFetchService:
             customer_ended_count = completed_data.get('customer_ended_count', 0) or 0
             
             remaining_calls = results[5][0]['count'] if results[5] and len(results[5]) > 0 else 0
-            
+
+            # Extract pauseAllCampaigns setting
+            pause_all_campaigns = False
+            try:
+                if results[8] and len(results[8]) > 0:
+                    raw_val = results[8][0].get('value', '0')
+                    pause_all_campaigns = str(raw_val).strip().lower() in ('1', 'true', 'yes')
+            except Exception:
+                pass
+
             # Debug: Log recent campaigns data with timezone info
-            if results[7] and len(results[7]) > 0:
+            if results[9] and len(results[9]) > 0:
                 logger.info(f"Recent campaigns for {partner.partnerName}:")
-                logger.info(f"  Today EST: {results[7][0]['today_est']}, Current EST: {results[7][0]['current_est']}")
-                for campaign in results[7][:5]:  # Show first 5 campaigns
+                logger.info(f"  Today EST: {results[9][0]['today_est']}, Current EST: {results[9][0]['current_est']}")
+                for campaign in results[9][:5]:  # Show first 5 campaigns
                     logger.info(f"  Campaign {campaign['id']}: Created UTC: {campaign['createdAt']}, Date UTC: {campaign['creation_date_utc']}, Date EST: {campaign['creation_date_est']}, Status: {campaign['status']}, Deleted: {campaign['deleted']}")
                 
                 # Count campaigns created today in EST
-                today_est = results[7][0]['today_est']
-                campaigns_today_debug = sum(1 for c in results[7] if c['creation_date_est'] == today_est and c['deleted'] == 0)
+                today_est = results[9][0]['today_est']
+                campaigns_today_debug = sum(1 for c in results[9] if c['creation_date_est'] == today_est and c['deleted'] == 0)
                 logger.info(f"  Debug count of campaigns today (EST): {campaigns_today_debug} (vs query result: {campaigns_today})")
             else:
                 logger.info(f"No recent campaigns found for {partner.partnerName}")
@@ -362,6 +376,7 @@ class DataFetchService:
                 'voicemailCount': voicemail_count,
                 'customerEndedCount': customer_ended_count,
                 'remainingCalls': remaining_calls,
+                'pauseAllCampaigns': pause_all_campaigns,
             }
             
             logger.info(f"Fetched real metrics for {partner.partnerName}: {metrics}")

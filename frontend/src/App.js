@@ -9,6 +9,7 @@ import Settings from './pages/Settings';
 import PartnerDetail from './pages/PartnerDetail';
 import PublicApiDocs from './pages/PublicApiDocs';
 import ConcurrencyAllocation from './pages/ConcurrencyAllocation';
+import QAPage from './pages/QAPage';
 import './App.css';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -76,6 +77,14 @@ function App() {
             element={
               <PrivateRoute>
                 <PartnerDetail />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/concurrency"
+            element={
+              <PrivateRoute>
+                <QAPage />
               </PrivateRoute>
             }
           />

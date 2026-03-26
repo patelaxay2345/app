@@ -1,10 +1,13 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header, Query
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import json
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional, List
@@ -22,6 +25,9 @@ from services.concurrency import ConcurrencyService
 from services.concurrency_allocator import ConcurrencyAllocator
 from services.alert import AlertService
 from services.email_service import EmailService
+from services.qa_service import QAService
+from services.qa_analysis_service import QAAnalysisService
+from services.s3_service import S3Service
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -94,6 +100,9 @@ concurrency_allocator = ConcurrencyAllocator(db, ssh_service)
 email_service = EmailService()
 alert_service = AlertService(db, email_service)
 data_fetch_service = DataFetchService(db, ssh_service, alert_service, allocator=concurrency_allocator)
+qa_service = QAService(ssh_service)
+qa_analysis_service = QAAnalysisService(db, ssh_service, email_service)
+s3_service = S3Service(encryption_service)
 
 # Configure logging
 logging.basicConfig(
@@ -131,23 +140,28 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+async def _decode_token(token: str) -> User:
     try:
-        token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        
+
         user_data = await db.users.find_one({"id": user_id}, {"_id": 0})
         if user_data is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        
+
         return User(**user_data)
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    return await _decode_token(credentials.credentials)
+
+async def verify_token_from_query(token: str = Query(..., description="JWT authentication token")) -> User:
+    return await _decode_token(token)
 
 # ============= Authentication Routes =============
 @api_router.post(
@@ -408,7 +422,14 @@ async def create_partner(partner_input: PartnerConfigCreate, current_user: User 
         partner_dict['sshConfig']['privateKey'] = encryption_service.encrypt(partner_input.sshConfig.privateKey)
     if partner_input.sshConfig.passphrase:
         partner_dict['sshConfig']['passphrase'] = encryption_service.encrypt(partner_input.sshConfig.passphrase)
-    
+
+    # Encrypt S3 credentials
+    if partner_input.s3Config:
+        if partner_input.s3Config.accessKeyId:
+            partner_dict['s3Config']['accessKeyId'] = encryption_service.encrypt(partner_input.s3Config.accessKeyId)
+        if partner_input.s3Config.secretAccessKey:
+            partner_dict['s3Config']['secretAccessKey'] = encryption_service.encrypt(partner_input.s3Config.secretAccessKey)
+
     partner_dict['createdAt'] = partner_dict['createdAt'].isoformat()
     partner_dict['updatedAt'] = partner_dict['updatedAt'].isoformat()
     if partner_dict.get('lastSyncAt'):
@@ -478,9 +499,12 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
     
     update_dict = partner_update.model_dump(exclude_unset=True)
     
-    # Encrypt sensitive fields if provided
-    if 'dbPassword' in update_dict and update_dict['dbPassword']:
-        update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
+    # Encrypt dbPassword if a new value was provided; otherwise preserve existing
+    if 'dbPassword' in update_dict:
+        if update_dict['dbPassword']:
+            update_dict['dbPassword'] = encryption_service.encrypt(update_dict['dbPassword'])
+        else:
+            del update_dict['dbPassword']
     
     # Handle SSH config updates carefully - merge with existing config to avoid losing credentials
     if 'sshConfig' in update_dict:
@@ -503,7 +527,24 @@ async def update_partner(partner_id: str, partner_update: PartnerConfigUpdate, c
                 merged_ssh[key] = value
         
         update_dict['sshConfig'] = merged_ssh
-    
+
+    # Handle S3 config updates — same merge pattern
+    if 's3Config' in update_dict:
+        existing_s3 = partner_data.get('s3Config', {})
+        updated_s3 = update_dict['s3Config']
+
+        if updated_s3.get('accessKeyId'):
+            updated_s3['accessKeyId'] = encryption_service.encrypt(updated_s3['accessKeyId'])
+        if updated_s3.get('secretAccessKey'):
+            updated_s3['secretAccessKey'] = encryption_service.encrypt(updated_s3['secretAccessKey'])
+
+        merged_s3 = existing_s3.copy()
+        for key, value in updated_s3.items():
+            if value is not None and value != '':
+                merged_s3[key] = value
+
+        update_dict['s3Config'] = merged_s3
+
     update_dict['updatedAt'] = datetime.now(timezone.utc).isoformat()
     
     await db.partner_configs.update_one({"id": partner_id}, {"$set": update_dict})
@@ -1831,6 +1872,292 @@ async def get_all_partners_period_statistics(
             },
             "partnerBreakdown": []
         }
+
+# ============= QA Routes =============
+@api_router.get(
+    "/partners/{partner_id}/qa/calls",
+    response_model=List[QACallResponse],
+    tags=["QA"],
+    summary="Get QA calls for a partner",
+    description="Fetch calls with QA analysis data from a partner's database for a given date."
+)
+async def get_qa_calls(
+    partner_id: str,
+    date: str,
+    minMinutes: int = 2,
+    current_user: User = Depends(get_current_user)
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    partner = PartnerConfig(**partner_data)
+
+    try:
+        calls = await qa_service.get_qa_calls(partner, date, minMinutes)
+        return calls
+    except Exception as e:
+        logger.error(f"Error fetching QA calls for partner {partner.partnerName}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching QA calls: {str(e)}")
+
+@api_router.get(
+    "/partners/{partner_id}/qa/calls/{call_id}",
+    response_model=QACallResponse,
+    tags=["QA"],
+    summary="Get a single QA call",
+    description="Fetch a single call with full QA analysis data from a partner's database."
+)
+async def get_qa_call(
+    partner_id: str,
+    call_id: int,
+    current_user: User = Depends(get_current_user)
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    partner = PartnerConfig(**partner_data)
+
+    try:
+        call = await qa_service.get_qa_call(partner, call_id)
+        if not call:
+            raise HTTPException(status_code=404, detail="Call not found")
+        return call
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching QA call {call_id} for partner {partner.partnerName}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching QA call: {str(e)}")
+
+@api_router.patch(
+    "/partners/{partner_id}/qa/calls/{call_id}/review",
+    tags=["QA"],
+    summary="Submit human QA review",
+    description="Submit or update human review scores (1-10) for a call's QA analysis."
+)
+async def review_qa_call(
+    partner_id: str,
+    call_id: int,
+    review: QAReviewRequest,
+    current_user: User = Depends(get_current_user)
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    partner = PartnerConfig(**partner_data)
+
+    try:
+        success = await qa_service.update_qa_review(partner, call_id, review)
+        if success:
+            return {"message": "QA review saved successfully", "callId": call_id}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save QA review")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving QA review for call {call_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error saving QA review: {str(e)}")
+
+@api_router.post(
+    "/partners/{partner_id}/qa/analyze",
+    tags=["QA"],
+    summary="Run AI analysis on calls",
+    description="Queue calls for AI-powered QA analysis. Runs in background and returns immediately."
+)
+async def analyze_qa_calls(
+    partner_id: str,
+    request: QAAnalyzeRequest,
+    current_user: User = Depends(get_current_user)
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    partner = PartnerConfig(**partner_data)
+
+    call_ids = request.callIds
+    if request.maxAnalyze and request.maxAnalyze > 0:
+        call_ids = call_ids[:request.maxAnalyze]
+
+    if not call_ids:
+        return {"message": "No calls to analyze", "total": 0}
+
+    # Prevent duplicate analysis for the same partner
+    running_jobs = await db.qa_analysis_jobs.count_documents({
+        "partnerId": partner_id,
+        "status": {"$in": ["queued", "processing"]}
+    })
+    if running_jobs > 0:
+        raise HTTPException(status_code=409, detail="Analysis already in progress for this partner")
+
+    # Run analysis as background task
+    async def _run_analysis():
+        try:
+            await qa_analysis_service.batch_analyze(partner, call_ids, partner.partnerName)
+        except Exception as e:
+            logger.error(f"Background QA analysis failed: {str(e)}")
+
+    asyncio.create_task(_run_analysis())
+
+    return {
+        "message": f"QA analysis started for {len(call_ids)} calls",
+        "total": len(call_ids),
+        "callIds": call_ids,
+    }
+
+@api_router.get(
+    "/partners/{partner_id}/qa/analyze/status",
+    tags=["QA"],
+    summary="Get AI analysis job status",
+    description="Check the status of QA analysis jobs for a partner."
+)
+async def get_qa_analysis_status(
+    partner_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    jobs = await qa_analysis_service.get_analysis_status(partner_id)
+
+    summary = {
+        "queued": sum(1 for j in jobs if j.get("status") == "queued"),
+        "processing": sum(1 for j in jobs if j.get("status") == "processing"),
+        "completed": sum(1 for j in jobs if j.get("status") == "completed"),
+        "failed": sum(1 for j in jobs if j.get("status") == "failed"),
+    }
+
+    return {"summary": summary, "jobs": jobs}
+
+@api_router.get(
+    "/partners/{partner_id}/qa/analyze/stream",
+    tags=["QA"],
+    summary="Stream QA analysis progress via SSE",
+    description="Server-Sent Events stream for real-time analysis progress. Pass JWT token as query parameter.",
+)
+async def stream_qa_analysis(
+    partner_id: str,
+    current_user: User = Depends(verify_token_from_query),
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    queue = qa_analysis_service.subscribe(partner_id)
+
+    async def event_generator():
+        try:
+            while True:
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+
+                event_name = msg.get("event", "message")
+                data = json.dumps(msg.get("data", {}))
+                yield f"event: {event_name}\ndata: {data}\n\n"
+
+                if event_name == "done":
+                    break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            qa_analysis_service.unsubscribe(partner_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+@api_router.get(
+    "/partners/{partner_id}/qa/presigned-url",
+    tags=["QA"],
+    summary="Get a playable URL for a private S3 recording",
+    description="Returns a direct-playable URL for the browser's <audio> element. "
+                "Public recordings (amazonaws.com) are returned as-is. "
+                "Private recordings (Linode, etc.) get a time-limited presigned URL.",
+)
+async def get_presigned_url(
+    partner_id: str,
+    url: str = Query(..., description="Full S3 HTTPS URL of the recording"),
+    current_user: User = Depends(get_current_user),
+):
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    s3_config = partner_data.get("s3Config")
+    if not s3_config or not s3_config.get("enabled"):
+        raise HTTPException(status_code=400, detail="S3 not configured for this partner")
+
+    result = s3_service.get_playable_url(s3_config, url)
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return {"presignedUrl": result["presignedUrl"], "contentType": result.get("contentType")}
+
+@api_router.post(
+    "/partners/{partner_id}/qa/email-report",
+    tags=["QA"],
+    summary="Send QA email report",
+    description="Generate and send an HTML email report with call QA scores."
+)
+async def email_qa_report(
+    partner_id: str,
+    request: QAEmailReportRequest,
+    current_user: User = Depends(get_current_user)
+):
+    import time
+    t_start = time.time()
+    logger.info(f"[QA-EMAIL] ====== API /qa/email-report HIT ======")
+    logger.info(f"[QA-EMAIL] partner_id={partner_id}, calls={len(request.calls)}, user={current_user.username}")
+
+    t0 = time.time()
+    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
+    logger.info(f"[QA-EMAIL] DB partner lookup took {time.time() - t0:.3f}s")
+    if not partner_data:
+        raise HTTPException(status_code=404, detail="Partner not found")
+
+    partner_name = request.partnerName or partner_data.get("partnerName", "Unknown")
+
+    t1 = time.time()
+    calls_dicts = [c.model_dump() for c in request.calls]
+    logger.info(f"[QA-EMAIL] Serialized {len(calls_dicts)} calls in {time.time() - t1:.3f}s")
+
+    try:
+        t2 = time.time()
+        success = await email_service.send_qa_report_email(
+            calls=calls_dicts,
+            date=request.date,
+            partner_name=partner_name,
+            score_filter=request.scoreFilter,
+            cc=request.cc,
+            custom_message=request.message,
+        )
+        logger.info(f"[QA-EMAIL] email_service.send_qa_report_email returned in {time.time() - t2:.3f}s | success={success}")
+
+        total = time.time() - t_start
+        if success:
+            logger.info(f"[QA-EMAIL] ====== API /qa/email-report DONE in {total:.3f}s ======")
+            return {"message": f"QA report sent for {len(request.calls)} calls", "success": True}
+        else:
+            logger.error(f"[QA-EMAIL] ====== API /qa/email-report FAILED after {total:.3f}s ======")
+            raise HTTPException(status_code=500, detail="Failed to send QA report email")
+    except HTTPException:
+        raise
+    except Exception as e:
+        total = time.time() - t_start
+        logger.error(f"[QA-EMAIL] ====== API /qa/email-report EXCEPTION after {total:.3f}s ======")
+        logger.error(f"[QA-EMAIL] Error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error sending QA report: {str(e)}")
 
 # ============= Public API Routes =============
 @api_router.get(

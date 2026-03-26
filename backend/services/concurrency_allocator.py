@@ -103,7 +103,8 @@ class ConcurrencyAllocator:
         for p in partners:
             snap = snapshots.get(p.id, {})
             remaining = snap.get("remainingCalls", 0)
-            paused = snap.get("pauseAllCampaigns", False)
+            raw_paused = snap.get("pauseAllCampaigns", False)
+            paused = raw_paused if isinstance(raw_paused, bool) else str(raw_paused).strip().lower() in ("1", "true", "yes")
             if remaining > 0 and not paused:
                 tier_clients[p.priority].append(p)
 
@@ -186,7 +187,8 @@ class ConcurrencyAllocator:
             p = partner_map[pid]
             snap = snapshots.get(pid, {})
             active_calls = snap.get("activeCalls", 0)
-            raw_new_limit = active_calls + int(slots)
+            queued_calls = snap.get("queuedCalls", 0)
+            raw_new_limit = active_calls + queued_calls + int(slots)
             new_limit = max(raw_new_limit, settings.minConcurrencyPerClient)
             new_limit = min(new_limit, p.maxConcurrency)
 

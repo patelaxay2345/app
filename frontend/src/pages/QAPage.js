@@ -133,6 +133,7 @@ function QAPage() {
       toast.error('Please select a client first');
       return;
     }
+    stopAudio();
     setLoading(true);
     setCalls([]);
     setPage(1);
@@ -629,6 +630,7 @@ function QAPage() {
               <select
                 value={selectedPartnerId}
                 onChange={(e) => {
+                  stopAudio();
                   setSelectedPartnerId(e.target.value);
                   setCalls([]);
                   setPage(1);

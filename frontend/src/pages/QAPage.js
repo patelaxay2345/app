@@ -463,23 +463,6 @@ function QAPage() {
     // Stop any currently playing audio
     stopAudio();
 
-    // If we already have a presigned URL cached, play immediately
-    if (presignedUrls[call.id]) {
-      playAudio(call.id, presignedUrls[call.id].url, presignedUrls[call.id].contentType);
-      return;
-    }
-
-    // Check if partner has S3 config enabled
-    const partner = partners.find((p) => p.id === selectedPartnerId);
-    const hasS3 = partner?.s3Config?.enabled;
-
-    if (!hasS3) {
-      // No S3 config — use recording URL directly
-      setPresignedUrls((prev) => ({ ...prev, [call.id]: { url: call.recordingUrl, contentType: null } }));
-      playAudio(call.id, call.recordingUrl, null);
-      return;
-    }
-
     // Get a direct-playable URL (public URL as-is, or presigned for private S3)
     setLoadingAudioId(call.id);
     try {

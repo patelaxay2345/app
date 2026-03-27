@@ -119,10 +119,10 @@ function QAReviewDialog({ open, onOpenChange, call, onSubmit, saving }) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="border-white/10 text-gray-300">
+          <Button onClick={() => onOpenChange(false)} className="bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-500/30">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!isValid() || saving}>
+          <Button onClick={handleSubmit} disabled={!isValid() || saving} className="bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30">
             {saving ? 'Saving...' : 'Save Review'}
           </Button>
         </DialogFooter>

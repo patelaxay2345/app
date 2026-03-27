@@ -349,15 +349,25 @@ class QAReviewRequest(BaseModel):
     humanConversationQuality: int = Field(ge=1, le=10)
     humanNotes: Optional[str] = ""
 
-class QAAnalyzeRequest(BaseModel):
-    callIds: List[int]
-    maxAnalyze: Optional[int] = None
+class QAAnalyzeCallData(BaseModel):
+    """Call data sent from frontend to avoid redundant SSH fetches during analysis."""
+    id: int
+    tenantId: Optional[int] = None
+    duration: Optional[int] = None
+    endReason: Optional[str] = None
+    recordingUrl: Optional[str] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    campaignName: Optional[str] = None
+    contactFirstName: Optional[str] = None
+    contactLastName: Optional[str] = None
+    contactPhone: Optional[str] = None
 
-class QAAnalysisJobStatus(str, Enum):
-    QUEUED = "queued"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
+class QAAnalyzeRequest(BaseModel):
+    calls: Optional[List[QAAnalyzeCallData]] = None
+    callIds: Optional[List[int]] = None
+    maxAnalyze: Optional[int] = None
+    date: Optional[str] = None
 
 class QAEmailReportCall(BaseModel):
     id: int

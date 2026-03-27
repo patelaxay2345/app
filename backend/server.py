@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, Header, Query
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from starlette.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -159,9 +158,6 @@ async def _decode_token(token: str) -> User:
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     return await _decode_token(credentials.credentials)
-
-async def verify_token_from_query(token: str = Query(..., description="JWT authentication token")) -> User:
-    return await _decode_token(token)
 
 # ============= Authentication Routes =============
 @api_router.post(
@@ -1961,25 +1957,34 @@ async def analyze_qa_calls(
 
     partner = PartnerConfig(**partner_data)
 
-    call_ids = request.callIds
-    if request.maxAnalyze and request.maxAnalyze > 0:
-        call_ids = call_ids[:request.maxAnalyze]
+    if request.calls:
+        # New path: frontend sent full call data — skip SSH fetches
+        calls_data = [c.model_dump() for c in request.calls]
+        if request.maxAnalyze and request.maxAnalyze > 0:
+            calls_data = calls_data[:request.maxAnalyze]
+        call_ids = [c["id"] for c in calls_data]
+        use_legacy = False
+    elif request.callIds:
+        # Legacy path: frontend sent only call IDs — fall back to SSH fetch per call
+        call_ids = request.callIds
+        if request.maxAnalyze and request.maxAnalyze > 0:
+            call_ids = call_ids[:request.maxAnalyze]
+        calls_data = None
+        use_legacy = True
+    else:
+        return {"message": "No calls to analyze", "total": 0}
 
     if not call_ids:
         return {"message": "No calls to analyze", "total": 0}
 
-    # Prevent duplicate analysis for the same partner
-    running_jobs = await db.qa_analysis_jobs.count_documents({
-        "partnerId": partner_id,
-        "status": {"$in": ["queued", "processing"]}
-    })
-    if running_jobs > 0:
-        raise HTTPException(status_code=409, detail="Analysis already in progress for this partner")
-
     # Run analysis as background task
+    report_date = request.date
     async def _run_analysis():
         try:
-            await qa_analysis_service.batch_analyze(partner, call_ids, partner.partnerName)
+            if use_legacy:
+                await qa_analysis_service.batch_analyze_legacy(partner, call_ids, partner.partnerName, report_date)
+            else:
+                await qa_analysis_service.batch_analyze(partner, calls_data, partner.partnerName, report_date)
         except Exception as e:
             logger.error(f"Background QA analysis failed: {str(e)}")
 
@@ -1990,77 +1995,6 @@ async def analyze_qa_calls(
         "total": len(call_ids),
         "callIds": call_ids,
     }
-
-@api_router.get(
-    "/partners/{partner_id}/qa/analyze/status",
-    tags=["QA"],
-    summary="Get AI analysis job status",
-    description="Check the status of QA analysis jobs for a partner."
-)
-async def get_qa_analysis_status(
-    partner_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
-    if not partner_data:
-        raise HTTPException(status_code=404, detail="Partner not found")
-
-    jobs = await qa_analysis_service.get_analysis_status(partner_id)
-
-    summary = {
-        "queued": sum(1 for j in jobs if j.get("status") == "queued"),
-        "processing": sum(1 for j in jobs if j.get("status") == "processing"),
-        "completed": sum(1 for j in jobs if j.get("status") == "completed"),
-        "failed": sum(1 for j in jobs if j.get("status") == "failed"),
-    }
-
-    return {"summary": summary, "jobs": jobs}
-
-@api_router.get(
-    "/partners/{partner_id}/qa/analyze/stream",
-    tags=["QA"],
-    summary="Stream QA analysis progress via SSE",
-    description="Server-Sent Events stream for real-time analysis progress. Pass JWT token as query parameter.",
-)
-async def stream_qa_analysis(
-    partner_id: str,
-    current_user: User = Depends(verify_token_from_query),
-):
-    partner_data = await db.partner_configs.find_one({"id": partner_id}, {"_id": 0})
-    if not partner_data:
-        raise HTTPException(status_code=404, detail="Partner not found")
-
-    queue = qa_analysis_service.subscribe(partner_id)
-
-    async def event_generator():
-        try:
-            while True:
-                try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-                    continue
-
-                event_name = msg.get("event", "message")
-                data = json.dumps(msg.get("data", {}))
-                yield f"event: {event_name}\ndata: {data}\n\n"
-
-                if event_name == "done":
-                    break
-        except asyncio.CancelledError:
-            pass
-        finally:
-            qa_analysis_service.unsubscribe(partner_id)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 @api_router.get(
     "/partners/{partner_id}/qa/presigned-url",
@@ -2117,11 +2051,18 @@ async def email_qa_report(
     calls_dicts = [c.model_dump() for c in request.calls]
     logger.info(f"[QA-EMAIL] Serialized {len(calls_dicts)} calls in {time.time() - t1:.3f}s")
 
+    # Fetch QA report recipients from settings
+    recipients = None
+    setting = await db.system_settings.find_one({"settingKey": "qaReportRecipients"}, {"_id": 0})
+    if setting and setting.get("settingValue"):
+        recipients = [e.strip() for e in str(setting["settingValue"]).split(",") if e.strip()]
+
     try:
         t2 = time.time()
         success = await email_service.send_qa_report_email(
             calls=calls_dicts,
             date=request.date,
+            to_addresses=recipients or None,
             partner_name=partner_name,
             score_filter=request.scoreFilter,
             cc=request.cc,
@@ -2485,6 +2426,7 @@ async def startup_event():
         {"settingKey": "highQueuedMin", "settingValue": 100, "description": "High priority queued min"},
         {"settingKey": "highQueuedMax", "settingValue": 200, "description": "High priority queued max"},
         {"settingKey": "publicApiAllowedDomains", "settingValue": "", "description": "Comma-separated list of allowed domains for public API CORS (e.g., https://example.com,https://another.com). Leave empty to allow all origins."},
+        {"settingKey": "qaReportRecipients", "settingValue": "bhavdipm@aptask.com", "description": "Comma-separated email addresses for QA analysis report recipients"},
     ]
     
     for setting in default_settings:

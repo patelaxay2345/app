@@ -368,6 +368,107 @@ class SSHConnectionService:
             logger.error(f"Error executing batch queries: {str(e)}")
             raise
     
+    async def execute_batch_updates(self, partner: PartnerConfig, queries: list) -> list:
+        """Execute multiple INSERT/UPDATE queries through a single SSH tunnel connection.
+
+        Each entry in queries is a dict: {'query': str, 'params': tuple}.
+        Returns a list of affected row counts.
+        """
+        from sshtunnel import SSHTunnelForwarder
+        import tempfile
+
+        try:
+            if not partner.sshConfig.enabled:
+                # Direct connection without SSH
+                db_password = self.encryption_service.decrypt(partner.dbPassword)
+                mysql_conn = pymysql.connect(
+                    host=partner.dbHost,
+                    port=partner.dbPort,
+                    user=partner.dbUsername,
+                    password=db_password,
+                    database=partner.dbName,
+                    connect_timeout=30
+                )
+
+                results = []
+                cursor = mysql_conn.cursor()
+                for query_info in queries:
+                    query = query_info['query']
+                    params = query_info.get('params', None)
+                    cursor.execute(query, params)
+                    results.append(cursor.rowcount)
+                mysql_conn.commit()
+                cursor.close()
+                mysql_conn.close()
+
+                return results
+            else:
+                # Connection through SSH tunnel - reuse tunnel for all updates
+                db_password = self.encryption_service.decrypt(partner.dbPassword)
+
+                # Prepare SSH authentication
+                ssh_pkey = None
+                ssh_password = None
+
+                if partner.sshConfig.privateKey:
+                    private_key_str = self.encryption_service.decrypt(partner.sshConfig.privateKey)
+
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem') as key_file:
+                        key_file.write(private_key_str)
+                        key_file_path = key_file.name
+
+                    ssh_pkey = key_file_path
+                elif partner.sshConfig.password:
+                    ssh_password = self.encryption_service.decrypt(partner.sshConfig.password)
+
+                # Create SSH tunnel (ONE tunnel for all updates)
+                tunnel = SSHTunnelForwarder(
+                    (partner.sshConfig.host, partner.sshConfig.port),
+                    ssh_username=partner.sshConfig.username,
+                    ssh_pkey=ssh_pkey if ssh_pkey else None,
+                    ssh_password=ssh_password if ssh_password else None,
+                    remote_bind_address=(partner.dbHost, partner.dbPort),
+                    local_bind_address=('127.0.0.1', 0)
+                )
+
+                tunnel.start()
+
+                try:
+                    mysql_conn = pymysql.connect(
+                        host='127.0.0.1',
+                        port=tunnel.local_bind_port,
+                        user=partner.dbUsername,
+                        password=db_password,
+                        database=partner.dbName,
+                        connect_timeout=30
+                    )
+
+                    results = []
+                    cursor = mysql_conn.cursor()
+                    for query_info in queries:
+                        query = query_info['query']
+                        params = query_info.get('params', None)
+                        cursor.execute(query, params)
+                        results.append(cursor.rowcount)
+                    mysql_conn.commit()
+                    cursor.close()
+                    mysql_conn.close()
+
+                    return results
+
+                finally:
+                    tunnel.stop()
+                    if ssh_pkey:
+                        import os
+                        try:
+                            os.remove(ssh_pkey)
+                        except Exception:
+                            pass
+
+        except Exception as e:
+            logger.error(f"Error executing batch updates: {str(e)}")
+            raise
+
     async def execute_update(self, partner: PartnerConfig, query: str, params: tuple = None) -> int:
         """Execute UPDATE/INSERT query on partner database through SSH tunnel and return affected rows"""
         from sshtunnel import SSHTunnelForwarder

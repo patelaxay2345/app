@@ -4,9 +4,11 @@ import asyncio
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 import os
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -26,23 +28,45 @@ class EmailService:
         html_body: str,
         text_body: str,
         cc_addresses: Optional[List[str]] = None,
+        attachments: Optional[List[Tuple[str, bytes, str]]] = None,
     ) -> bool:
-        """Send email via SES SMTP."""
+        """Send email via SES SMTP.
+
+        attachments: list of (filename, content_bytes, mime_type) tuples, e.g.
+                     [("report.csv", b"id,name\\n1,John", "text/csv")]
+        """
         t_start = time.time()
         logger.info(f"[QA-EMAIL] ====== send_email START ======")
         logger.info(f"[QA-EMAIL] To: {to_addresses}, CC: {cc_addresses}, Subject: {subject[:80]}")
         logger.info(f"[QA-EMAIL] SMTP config: host={self.smtp_host}, port={self.smtp_port}, from={self.from_email}")
         try:
             t0 = time.time()
-            msg = MIMEMultipart('alternative')
+
+            if attachments:
+                # mixed: body + attachments at top level
+                msg = MIMEMultipart('mixed')
+                body_part = MIMEMultipart('alternative')
+                body_part.attach(MIMEText(text_body, 'plain'))
+                body_part.attach(MIMEText(html_body, 'html'))
+                msg.attach(body_part)
+
+                for filename, content, mime_type in attachments:
+                    maintype, subtype = mime_type.split('/', 1)
+                    part = MIMEBase(maintype, subtype)
+                    part.set_payload(content)
+                    encoders.encode_base64(part)
+                    part.add_header('Content-Disposition', 'attachment', filename=filename)
+                    msg.attach(part)
+            else:
+                msg = MIMEMultipart('alternative')
+                msg.attach(MIMEText(text_body, 'plain'))
+                msg.attach(MIMEText(html_body, 'html'))
+
             msg['Subject'] = subject
             msg['From'] = self.from_email
             msg['To'] = ', '.join(to_addresses)
             if cc_addresses:
                 msg['Cc'] = ', '.join(cc_addresses)
-
-            msg.attach(MIMEText(text_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
 
             all_recipients = list(to_addresses)
             if cc_addresses:
@@ -143,12 +167,16 @@ class EmailService:
         self,
         calls: List[Dict[str, Any]],
         date: str,
+        to_addresses: Optional[List[str]] = None,
         partner_name: Optional[str] = None,
         score_filter: Optional[int] = None,
         cc: Optional[List[str]] = None,
         custom_message: Optional[str] = None,
     ) -> bool:
-        """Send QA report email with call scores table via SES SMTP."""
+        """Send QA report email with call scores as CSV attachment via SES SMTP."""
+        import csv
+        import io
+
         t_start = time.time()
         logger.info(f"[QA-EMAIL] ====== send_qa_report_email START ======")
         logger.info(f"[QA-EMAIL] Partner: {partner_name}, Date: {date}, Calls: {len(calls)}, ScoreFilter: {score_filter}, CC: {cc}")
@@ -162,97 +190,68 @@ class EmailService:
                 m, s = divmod(int(seconds), 60)
                 return f"{m}:{s:02d}"
 
-            def _score_cell(score, threshold=None):
-                if score is None:
-                    return '<td style="padding:6px 10px; border:1px solid #ddd; text-align:center; color:#999;">—</td>'
-                color = "#c0392b" if (threshold and score <= threshold) else "#333"
-                return f'<td style="padding:6px 10px; border:1px solid #ddd; text-align:center; color:{color}; font-weight:bold;">{score}</td>'
-
-            # Build table rows
-            rows_html = ""
+            # Build CSV
+            csv_buffer = io.StringIO()
+            writer = csv.writer(csv_buffer)
+            writer.writerow([
+                "Call ID", "Contact", "Phone", "Campaign", "Duration",
+                "AI Voice Quality", "AI Latency", "AI Conversation Quality",
+                "Human Voice Quality", "Human Latency", "Human Conversation Quality",
+                "Notes",
+            ])
             for call in calls:
                 qa = call.get("qaAnalysis") or {}
-                contact_name = f"{call.get('contactFirstName', '') or ''} {call.get('contactLastName', '') or ''}".strip() or "—"
-                phone = call.get("contactPhone", "—") or "—"
-                campaign = call.get("campaignName", "—") or "—"
-                duration = _format_duration(call.get("duration"))
-                threshold = score_filter
+                contact_name = f"{call.get('contactFirstName', '') or ''} {call.get('contactLastName', '') or ''}".strip()
+                writer.writerow([
+                    call.get("id", ""),
+                    contact_name,
+                    call.get("contactPhone", "") or "",
+                    call.get("campaignName", "") or "",
+                    _format_duration(call.get("duration")),
+                    qa.get("aiVoiceQuality", ""),
+                    qa.get("aiLatency", ""),
+                    qa.get("aiConversationQuality", ""),
+                    qa.get("humanVoiceQuality", ""),
+                    qa.get("humanLatency", ""),
+                    qa.get("humanConversationQuality", ""),
+                    qa.get("aiNotes", "") or "",
+                ])
 
-                rows_html += f"""
-                <tr>
-                    <td style="padding:6px 10px; border:1px solid #ddd;">{call.get('id', '—')}</td>
-                    <td style="padding:6px 10px; border:1px solid #ddd;">{contact_name}</td>
-                    <td style="padding:6px 10px; border:1px solid #ddd;">{phone}</td>
-                    <td style="padding:6px 10px; border:1px solid #ddd;">{campaign}</td>
-                    <td style="padding:6px 10px; border:1px solid #ddd; text-align:center;">{duration}</td>
-                    {_score_cell(qa.get('aiVoiceQuality'), threshold)}
-                    {_score_cell(qa.get('aiLatency'), threshold)}
-                    {_score_cell(qa.get('aiConversationQuality'), threshold)}
-                    {_score_cell(qa.get('humanVoiceQuality'), threshold)}
-                    {_score_cell(qa.get('humanLatency'), threshold)}
-                    {_score_cell(qa.get('humanConversationQuality'), threshold)}
-                    <td style="padding:6px 10px; border:1px solid #ddd; font-size:12px;">{qa.get('aiNotes', '') or ''}</td>
-                </tr>"""
+            csv_bytes = csv_buffer.getvalue().encode("utf-8")
+            safe_partner = (partner_name or "all").replace(" ", "_").lower()
+            csv_filename = f"qa_report_{safe_partner}_{date}.csv"
 
+            # Build email body (summary only, details in CSV)
+            filter_label = f" (scores ≤ {score_filter})" if score_filter else ""
             message_block = ""
             if custom_message:
                 message_block = f'<p style="margin-bottom:16px; padding:12px; background:#f0f4ff; border-radius:6px;">{custom_message}</p>'
 
-            filter_label = f" (scores ≤ {score_filter})" if score_filter else ""
-
             html_body = f"""
             <html>
-            <head></head>
             <body style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                 <h2 style="color: #2c3e50;">QA Report — {label} — {date}</h2>
-                <p><strong>{len(calls)}</strong> calls{filter_label}</p>
                 {message_block}
-                <table style="border-collapse: collapse; width: 100%; font-size: 13px;">
-                    <thead>
-                        <tr style="background: #2c3e50; color: white;">
-                            <th style="padding:8px 10px; border:1px solid #ddd;">ID</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">Contact</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">Phone</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">Campaign</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">Duration</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">AI Voice</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">AI Latency</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">AI Conv.</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">H. Voice</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">H. Latency</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">H. Conv.</th>
-                            <th style="padding:8px 10px; border:1px solid #ddd;">Notes</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-                <p style="margin-top: 20px; color: #999; font-size: 12px;">
-                    <em>This is an automated QA report from {self.app_name} Admin Dashboard.</em>
-                </p>
+                <p>Please find the detailed call scores in the attached CSV file.</p>
             </body>
             </html>
             """
 
             text_body = f"QA Report — {label} — {date} ({len(calls)} calls)\n\n"
             if custom_message:
-                text_body += f"Message: {custom_message}\n\n"
-            for call in calls:
-                qa = call.get("qaAnalysis") or {}
-                text_body += (
-                    f"Call #{call.get('id')}: "
-                    f"AI[V:{qa.get('aiVoiceQuality','—')} L:{qa.get('aiLatency','—')} C:{qa.get('aiConversationQuality','—')}] "
-                    f"Human[V:{qa.get('humanVoiceQuality','—')} L:{qa.get('humanLatency','—')} C:{qa.get('humanConversationQuality','—')}]\n"
-                )
+                text_body += f"{custom_message}\n\n"
+            text_body += "Please find the detailed call scores in the attached CSV file.\n"
 
-            to_email = "taj@aptask.com"
+            recipients = to_addresses or ["bhavdipm@aptask.com"]
 
-            logger.info(f"[QA-EMAIL] HTML body built in {time.time() - t_start:.3f}s | Size: {len(html_body)} chars")
+            logger.info(f"[QA-EMAIL] CSV built: {len(calls)} rows, {len(csv_bytes)} bytes | file: {csv_filename}")
+            logger.info(f"[QA-EMAIL] Recipients: {recipients}")
             logger.info(f"[QA-EMAIL] Handing off to send_email via thread ...")
 
             result = await asyncio.to_thread(
-                self.send_email, [to_email], subject, html_body, text_body, cc
+                self.send_email,
+                recipients, subject, html_body, text_body, cc,
+                attachments=[(csv_filename, csv_bytes, "text/csv")],
             )
 
             total = time.time() - t_start

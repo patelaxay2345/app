@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
@@ -5,6 +6,31 @@ from models import PartnerConfig, QACallResponse, QAAnalysisData, QAReviewReques
 from services.ssh_connection import SSHConnectionService
 
 logger = logging.getLogger(__name__)
+
+
+def parse_messages_to_transcript(messages_raw) -> Optional[str]:
+    """Convert messages JSON (str or list) into readable transcript text.
+
+    Input:  [{"role": "bot", "message": "Hello..."}, {"role": "user", "message": "Hi"}]
+    Output: "bot: Hello...\nuser: Hi"
+    """
+    if not messages_raw:
+        return None
+
+    try:
+        messages = messages_raw if isinstance(messages_raw, list) else json.loads(messages_raw)
+        if not isinstance(messages, list) or len(messages) == 0:
+            return None
+        lines = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            text = msg.get("message", "")
+            if text:
+                lines.append(f"{role}: {text}")
+        return "\n".join(lines) if lines else None
+    except (json.JSONDecodeError, TypeError, AttributeError) as e:
+        logger.warning(f"Failed to parse messages JSON: {e}")
+        return None
 
 
 class QAService:
@@ -25,7 +51,7 @@ class QAService:
                 c.status,
                 c.endReason,
                 c.recordingUrl,
-                c.transcript,
+                c.messages,
                 c.summary,
                 c.createdAt,
                 c.vmBeepAt,
@@ -86,7 +112,7 @@ class QAService:
                     status=row.get("status"),
                     endReason=row.get("endReason"),
                     recordingUrl=row.get("recordingUrl"),
-                    transcript=row.get("transcript"),
+                    transcript=parse_messages_to_transcript(row.get("messages")),
                     summary=row.get("summary"),
                     createdAt=created_at,
                     campaignName=row.get("campaignName"),
@@ -113,7 +139,7 @@ class QAService:
                 c.status,
                 c.endReason,
                 c.recordingUrl,
-                c.transcript,
+                c.messages,
                 c.summary,
                 c.createdAt,
                 c.vmBeepAt,
@@ -172,7 +198,7 @@ class QAService:
             status=row.get("status"),
             endReason=row.get("endReason"),
             recordingUrl=row.get("recordingUrl"),
-            transcript=row.get("transcript"),
+            transcript=parse_messages_to_transcript(row.get("messages")),
             summary=row.get("summary"),
             createdAt=created_at,
             campaignName=row.get("campaignName"),

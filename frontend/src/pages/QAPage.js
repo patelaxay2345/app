@@ -75,21 +75,19 @@ function QAPage() {
 
   // UI states
   const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState(null);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [playingCallId, setPlayingCallId] = useState(null);
   const [loadingAudioId, setLoadingAudioId] = useState(null);
   const [presignedUrls, setPresignedUrls] = useState({});
-  const eventSourceRef = useRef(null);
 
   // Dialogs
   const [reviewCall, setReviewCall] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [savingReview, setSavingReview] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [qaReportRecipients, setQaReportRecipients] = useState('');
 
-  // Fetch partners on mount
+  // Fetch partners and QA report recipients on mount
   useEffect(() => {
     const fetchPartners = async () => {
       try {
@@ -99,7 +97,16 @@ function QAPage() {
         toast.error('Failed to load partners');
       }
     };
+    const fetchQaRecipients = async () => {
+      try {
+        const res = await axios.get(`${API}/settings/qaReportRecipients`);
+        setQaReportRecipients(res.data.settingValue || '');
+      } catch {
+        // Setting may not exist yet
+      }
+    };
     fetchPartners();
+    fetchQaRecipients();
   }, []);
 
   // Persist selections
@@ -117,15 +124,6 @@ function QAPage() {
     localStorage.setItem('qa_min_minutes', String(minMinutes));
   }, [minMinutes]);
 
-  // Cleanup EventSource on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, []);
 
   // Fetch calls
   const fetchCalls = useCallback(async () => {
@@ -207,140 +205,28 @@ function QAPage() {
       toast.info('All calls already have AI analysis');
       return;
     }
-    setAnalyzing(true);
-    setAnalysisProgress({ total: unanalyzed.length, pending: unanalyzed.length, completed: 0, failed: 0, currentCallId: null });
     try {
-      const res = await axios.post(
+      await axios.post(
         `${API}/partners/${selectedPartnerId}/qa/analyze`,
-        { callIds: unanalyzed.map((c) => c.id) }
+        { date, calls: unanalyzed.map((c) => ({
+            id: c.id,
+            tenantId: c.tenantId,
+            duration: c.duration,
+            endReason: c.endReason,
+            recordingUrl: c.recordingUrl,
+            transcript: c.transcript,
+            summary: c.summary,
+            campaignName: c.campaignName,
+            contactFirstName: c.contactFirstName,
+            contactLastName: c.contactLastName,
+            contactPhone: c.contactPhone,
+          })) }
       );
-      toast.success(res.data.message);
-      // Connect to SSE stream for real-time progress
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      eventSourceRef.current = connectToSSE(selectedPartnerId);
+      toast.success(`AI analysis started for ${unanalyzed.length} calls. You will receive an email once it's complete.`);
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to start analysis');
-      setAnalyzing(false);
-      setAnalysisProgress(null);
     }
   };
-
-  const connectToSSE = useCallback((partnerId) => {
-    const token = localStorage.getItem('token');
-    const url = `${API}/partners/${partnerId}/qa/analyze/stream?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-
-    es.addEventListener('start', (e) => {
-      const data = JSON.parse(e.data);
-      setAnalysisProgress({
-        total: data.total,
-        pending: data.pending,
-        completed: 0,
-        failed: 0,
-        currentCallId: null,
-      });
-    });
-
-    es.addEventListener('processing', (e) => {
-      const data = JSON.parse(e.data);
-      setAnalysisProgress((prev) => prev ? { ...prev, currentCallId: data.callId } : prev);
-    });
-
-    es.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data);
-      setAnalysisProgress((prev) => prev ? {
-        ...prev,
-        completed: data.completed,
-        failed: data.failed,
-        pending: data.pending,
-        currentCallId: null,
-      } : prev);
-    });
-
-    es.addEventListener('done', (e) => {
-      const data = JSON.parse(e.data);
-      es.close();
-      eventSourceRef.current = null;
-      setAnalyzing(false);
-      setAnalysisProgress(null);
-      toast.success(`Analysis complete: ${data.completed} done, ${data.failed} failed`);
-      fetchCalls();
-    });
-
-    es.onerror = () => {
-      if (es.readyState === EventSource.CLOSED) {
-        es.close();
-        eventSourceRef.current = null;
-        // Fallback: check status once
-        axios.get(`${API}/partners/${partnerId}/qa/analyze/status`)
-          .then((res) => {
-            const { summary } = res.data;
-            const pending = summary.queued + summary.processing;
-            if (pending === 0) {
-              setAnalyzing(false);
-              setAnalysisProgress(null);
-              fetchCalls();
-            } else {
-              setAnalysisProgress((prev) => prev ? { ...prev, pending } : prev);
-              setTimeout(() => {
-                eventSourceRef.current = connectToSSE(partnerId);
-              }, 2000);
-            }
-          })
-          .catch(() => {
-            setAnalyzing(false);
-            setAnalysisProgress(null);
-            toast.info('Lost connection. Refresh to check analysis results.');
-          });
-      }
-    };
-
-    return es;
-  }, [fetchCalls]);
-
-  // Recover analysis state on page load / partner change
-  useEffect(() => {
-    if (!selectedPartnerId) return;
-    let cancelled = false;
-
-    const checkRunningAnalysis = async () => {
-      try {
-        const res = await axios.get(`${API}/partners/${selectedPartnerId}/qa/analyze/status`);
-        const { summary } = res.data;
-        const pending = summary.queued + summary.processing;
-        if (!cancelled && pending > 0) {
-          setAnalyzing(true);
-          setAnalysisProgress({
-            total: pending,
-            pending,
-            completed: 0,
-            failed: 0,
-            currentCallId: null,
-          });
-          if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-          }
-          eventSourceRef.current = connectToSSE(selectedPartnerId);
-        }
-      } catch {
-        // Silently ignore
-      }
-    };
-    checkRunningAnalysis();
-
-    return () => {
-      cancelled = true;
-      // Tear down SSE and reset analysis UI when partner changes
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      setAnalyzing(false);
-      setAnalysisProgress(null);
-    };
-  }, [selectedPartnerId, connectToSSE]);
 
   // Human review
   const openReview = (call) => {
@@ -663,6 +549,7 @@ function QAPage() {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="bg-black/40 border-white/10 text-white"
+                style={{ colorScheme: 'dark' }}
               />
             </div>
 
@@ -682,7 +569,7 @@ function QAPage() {
             <Button
               onClick={fetchCalls}
               disabled={loading || !selectedPartnerId}
-              className="h-9"
+              className="h-9 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               <span className="ml-1">Load Calls</span>
@@ -780,66 +667,22 @@ function QAPage() {
               {/* Action buttons */}
               <Button
                 size="sm"
-                variant="outline"
                 onClick={handleAnalyze}
-                disabled={analyzing}
-                className="border-white/10 text-gray-300 text-xs"
+                className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 text-xs"
               >
-                {analyzing ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Bot className="w-3 h-3" />
-                )}
-                <span className="ml-1">
-                  {analyzing && analysisProgress
-                    ? `Analyzing... ${analysisProgress.pending} pending`
-                    : analyzing
-                    ? 'Analyzing...'
-                    : 'Run AI Analysis'}
-                </span>
+                <Bot className="w-3 h-3" />
+                <span className="ml-1">Run AI Analysis</span>
               </Button>
 
               <Button
                 size="sm"
-                variant="outline"
                 onClick={() => setEmailDialogOpen(true)}
                 disabled={visibleCalls.length === 0}
-                className="border-white/10 text-gray-300 text-xs"
+                className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 text-xs"
               >
                 <Mail className="w-3 h-3" />
                 <span className="ml-1">Email Report</span>
               </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Analysis Progress Bar */}
-        {analyzing && analysisProgress && (
-          <div className="glass rounded-xl border border-white/10 p-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-4 h-4 animate-spin text-blue-400 flex-shrink-0" />
-              <div className="flex-1">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>
-                    {analysisProgress.currentCallId
-                      ? `Processing call #${analysisProgress.currentCallId}`
-                      : 'Waiting...'}
-                  </span>
-                  <span>
-                    {analysisProgress.pending} pending
-                    {analysisProgress.completed > 0 && ` · ${analysisProgress.completed} done`}
-                    {analysisProgress.failed > 0 && ` · ${analysisProgress.failed} failed`}
-                  </span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${analysisProgress.total > 0 ? ((analysisProgress.total - analysisProgress.pending) / analysisProgress.total) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -1086,19 +929,17 @@ function QAPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="border-white/10 text-gray-300 h-7 px-2"
+                    className="bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-500/30 h-7 px-2"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="border-white/10 text-gray-300 h-7 px-2"
+                    className="bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 border border-gray-500/30 h-7 px-2"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </Button>
@@ -1124,6 +965,7 @@ function QAPage() {
         onSubmit={handleEmailReport}
         sending={sendingEmail}
         callCount={visibleCalls.length}
+        recipients={qaReportRecipients}
       />
     </Layout>
   );

@@ -8,7 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Save, Lock, Loader2 } from 'lucide-react';
+import { Save, Lock, Loader2, X } from 'lucide-react';
 
 function Settings() {
   const [settings, setSettings] = useState({});
@@ -338,6 +338,66 @@ function Settings() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* QA Report Settings */}
+        <div className="glass rounded-xl border border-white/10 p-6">
+          <h3 className="text-xl font-semibold text-white mb-6">QA Report Settings</h3>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-gray-300 text-base">QA Report Email Recipients</Label>
+              <p className="text-sm text-gray-400 mt-1">
+                Type an email address and press Enter to add.
+              </p>
+              {(() => {
+                const emails = (settings.qaReportRecipients || '')
+                  .split(',')
+                  .map((e) => e.trim())
+                  .filter((e) => e.length > 0);
+                const removeEmail = (idx) => {
+                  const updated = emails.filter((_, i) => i !== idx);
+                  updateSetting('qaReportRecipients', updated.join(', '));
+                };
+                const addEmail = (value) => {
+                  const trimmed = value.trim();
+                  if (trimmed && !emails.includes(trimmed)) {
+                    updateSetting('qaReportRecipients', [...emails, trimmed].join(', '));
+                  }
+                };
+                return (
+                  <div className="flex flex-wrap items-center gap-2 p-2 min-h-[42px] bg-black/40 border border-white/10 rounded-md">
+                    {emails.map((email, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                      >
+                        {email}
+                        <button
+                          type="button"
+                          onClick={() => removeEmail(idx)}
+                          className="ml-0.5 hover:text-red-400 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      type="email"
+                      placeholder={emails.length === 0 ? 'email@example.com' : 'Add another...'}
+                      className="flex-1 min-w-[180px] bg-transparent border-none outline-none text-white text-sm placeholder:text-gray-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addEmail(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
 

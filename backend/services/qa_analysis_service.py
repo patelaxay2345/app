@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
-from models import PartnerConfig, QAAnalysisJobStatus
+from models import PartnerConfig
 from services.ssh_connection import SSHConnectionService
 from services.email_service import EmailService
+from services.qa_service import parse_messages_to_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ TRANSCRIPTION_TIMEOUT = 300  # 5 minutes
 ANALYSIS_TIMEOUT = 120  # 2 minutes
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 5
-URGENT_SCORE_THRESHOLD = 3
+SAVE_BATCH_SIZE = 10
 
 
 class QAAnalysisService:
@@ -29,7 +30,6 @@ class QAAnalysisService:
         self.db = db
         self.ssh_service = ssh_service
         self.email_service = email_service
-        self._event_queues: Dict[str, asyncio.Queue] = {}
 
         api_key = os.environ.get("OPENROUTER_API_KEY", "")
         self.openrouter = OpenAI(
@@ -40,19 +40,6 @@ class QAAnalysisService:
                 "X-Title": "qaAnalysis",
             },
         )
-
-    def subscribe(self, partner_id: str) -> asyncio.Queue:
-        if partner_id not in self._event_queues:
-            self._event_queues[partner_id] = asyncio.Queue(maxsize=1000)
-        return self._event_queues[partner_id]
-
-    def unsubscribe(self, partner_id: str):
-        self._event_queues.pop(partner_id, None)
-
-    async def _emit(self, partner_id: str, event: str, data: dict):
-        queue = self._event_queues.get(partner_id)
-        if queue and not queue.full():
-            await queue.put({"event": event, "data": data})
 
     async def transcribe_audio(self, recording_url: str) -> Optional[str]:
         """Download audio and transcribe using Gemini via OpenRouter."""
@@ -166,24 +153,180 @@ class QAAnalysisService:
             logger.error(f"Analysis error: {str(e)}")
             return None
 
-    async def process_single_call(
-        self, partner: PartnerConfig, call_id: int, partner_name: str
+    async def _process_single_call(
+        self, call_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Process a single call: fetch data, transcribe if needed, analyze, save scores."""
-        job_id = f"{partner.id}_{call_id}"
-
-        # Update job status to processing
-        await self.db.qa_analysis_jobs.update_one(
-            {"jobId": job_id},
-            {"$set": {"status": QAAnalysisJobStatus.PROCESSING, "updatedAt": datetime.now(timezone.utc).isoformat()}},
-        )
-        await self._emit(partner.id, "processing", {"callId": call_id})
+        """Score a single call using LLM. Uses call data provided directly (no SSH fetch).
+        Returns scores without saving to partner DB — batch_analyze handles batched saves.
+        """
+        call_id = call_data["id"]
 
         try:
-            # Fetch call data from partner DB
+            transcript = call_data.get("transcript")
+            summary = call_data.get("summary")
+            recording_url = call_data.get("recordingUrl")
+
+            # Transcribe if no transcript exists
+            if not transcript and recording_url:
+                logger.info(f"Transcribing call {call_id}...")
+                transcript = await self.transcribe_audio(recording_url)
+
+            # Analyze with retries
+            scores = None
+            last_error = None
+            for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+                try:
+                    scores = await self.analyze_call(
+                        transcript, summary, call_data.get("duration"), call_data.get("endReason")
+                    )
+                    if scores:
+                        break
+                except Exception as e:
+                    last_error = str(e)
+                    logger.warning(f"Analysis attempt {attempt}/{MAX_RETRY_ATTEMPTS} failed for call {call_id}: {e}")
+                    if attempt < MAX_RETRY_ATTEMPTS:
+                        await asyncio.sleep(RETRY_DELAY_SECONDS * attempt)
+
+            if not scores:
+                scores = {
+                    "voiceQuality": 0,
+                    "latency": 0,
+                    "conversationQuality": 0,
+                    "notes": f"Analysis failed: {last_error or 'No transcript/summary available'}",
+                }
+
+            return {
+                "callId": call_id,
+                "status": "completed",
+                "scores": scores,
+                "tenantId": call_data.get("tenantId"),
+                "call": call_data,
+            }
+
+        except Exception as e:
+            logger.error(f"Error processing call {call_id}: {str(e)}")
+            return {"callId": call_id, "status": "failed", "error": str(e)}
+
+    async def _flush_batch_save(
+        self, partner: PartnerConfig, pending_saves: List[Dict[str, Any]]
+    ):
+        """Save scores for a batch of calls in a single SSH tunnel."""
+        upsert_query = """
+            INSERT INTO qa_analysis (callId, tenantId, aiVoiceQuality, aiLatency, aiConversationQuality, aiNotes, createdAt, updatedAt)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                aiVoiceQuality = VALUES(aiVoiceQuality),
+                aiLatency = VALUES(aiLatency),
+                aiConversationQuality = VALUES(aiConversationQuality),
+                aiNotes = VALUES(aiNotes),
+                updatedAt = NOW()
+        """
+
+        queries = []
+        for item in pending_saves:
+            scores = item["scores"]
+            queries.append({
+                "query": upsert_query,
+                "params": (
+                    item["callId"],
+                    item.get("tenantId"),
+                    scores.get("voiceQuality"),
+                    scores.get("latency"),
+                    scores.get("conversationQuality"),
+                    scores.get("notes", ""),
+                ),
+            })
+
+        try:
+            await self.ssh_service.execute_batch_updates(partner, queries)
+            logger.info(f"Batch saved {len(queries)} call scores in single tunnel")
+        except Exception as e:
+            logger.error(f"Batch save failed for {len(queries)} calls: {e}")
+
+    async def batch_analyze(
+        self, partner: PartnerConfig, calls_data: List[Dict[str, Any]], partner_name: str,
+        report_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Process multiple calls: LLM scoring with batched DB saves via single SSH tunnels."""
+        total = len(calls_data)
+        logger.info(f"Starting batch analysis for {partner_name}: {total} calls")
+
+        # Process calls sequentially (LLM scoring) and collect results for batched saves
+        results = []
+        pending_saves = []
+        completed = 0
+        failed = 0
+
+        for call_data in calls_data:
+            result = await self._process_single_call(call_data)
+            results.append(result)
+
+            if result["status"] == "completed":
+                completed += 1
+                pending_saves.append(result)
+            else:
+                failed += 1
+
+            # Flush batch saves when batch is full
+            if len(pending_saves) >= SAVE_BATCH_SIZE:
+                await self._flush_batch_save(partner, pending_saves)
+                pending_saves = []
+
+        # Flush remaining saves
+        if pending_saves:
+            await self._flush_batch_save(partner, pending_saves)
+
+        logger.info(f"Batch analysis complete for {partner_name}: {completed} completed, {failed} failed")
+
+        # Send final summary email with all analyzed calls
+        await self._send_analysis_summary_email(results, partner_name, report_date)
+
+        return {
+            "total": total,
+            "completed": completed,
+            "failed": failed,
+            "results": results,
+        }
+
+    async def batch_analyze_legacy(
+        self, partner: PartnerConfig, call_ids: List[int], partner_name: str,
+        report_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Legacy path: fetch data via SSH per call. Used when frontend sends only call IDs."""
+        total = len(call_ids)
+        logger.info(f"Starting legacy batch analysis for {partner_name}: {total} calls")
+
+        results = []
+        completed = 0
+        failed = 0
+        for cid in call_ids:
+            result = await self._process_single_call_legacy(partner, cid)
+            results.append(result)
+            if result["status"] == "completed":
+                completed += 1
+            else:
+                failed += 1
+
+        logger.info(f"Legacy batch analysis complete for {partner_name}: {completed} completed, {failed} failed")
+
+        # Send final summary email with all analyzed calls
+        await self._send_analysis_summary_email(results, partner_name, report_date)
+
+        return {
+            "total": total,
+            "completed": completed,
+            "failed": failed,
+            "results": results,
+        }
+
+    async def _process_single_call_legacy(
+        self, partner: PartnerConfig, call_id: int
+    ) -> Dict[str, Any]:
+        """Legacy: fetch data via SSH, analyze, save via SSH. One tunnel per operation."""
+        try:
             query = """
                 SELECT c.id, c.tenantId, c.duration, c.endReason, c.recordingUrl,
-                       c.transcript, c.summary,
+                       c.messages, c.summary,
                        camp.name AS campaignName,
                        cont.firstName AS contactFirstName,
                        cont.lastName AS contactLastName,
@@ -198,16 +341,14 @@ class QAAnalysisService:
                 raise Exception(f"Call {call_id} not found in partner database")
 
             call = results[0]
-            transcript = call.get("transcript")
+            transcript = parse_messages_to_transcript(call.get("messages"))
             summary = call.get("summary")
             recording_url = call.get("recordingUrl")
 
-            # Transcribe if no transcript exists
             if not transcript and recording_url:
                 logger.info(f"Transcribing call {call_id}...")
                 transcript = await self.transcribe_audio(recording_url)
 
-            # Analyze
             scores = None
             last_error = None
             for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
@@ -224,7 +365,6 @@ class QAAnalysisService:
                         await asyncio.sleep(RETRY_DELAY_SECONDS * attempt)
 
             if not scores:
-                # Save fallback zeros
                 scores = {
                     "voiceQuality": 0,
                     "latency": 0,
@@ -232,7 +372,6 @@ class QAAnalysisService:
                     "notes": f"Analysis failed: {last_error or 'No transcript/summary available'}",
                 }
 
-            # Write scores to partner DB
             tenant_id = call.get("tenantId")
             upsert_query = """
                 INSERT INTO qa_analysis (callId, tenantId, aiVoiceQuality, aiLatency, aiConversationQuality, aiNotes, createdAt, updatedAt)
@@ -245,225 +384,72 @@ class QAAnalysisService:
                     updatedAt = NOW()
             """
             await self.ssh_service.execute_update(
-                partner,
-                upsert_query,
-                (
-                    call_id,
-                    tenant_id,
-                    scores.get("voiceQuality"),
-                    scores.get("latency"),
-                    scores.get("conversationQuality"),
-                    scores.get("notes", ""),
-                ),
+                partner, upsert_query,
+                (call_id, tenant_id, scores.get("voiceQuality"), scores.get("latency"),
+                 scores.get("conversationQuality"), scores.get("notes", "")),
             )
 
-            # Check for urgent scores
-            score_values = [
-                scores.get("voiceQuality"),
-                scores.get("latency"),
-                scores.get("conversationQuality"),
-            ]
-            valid_scores = [s for s in score_values if s is not None and s > 0]
-            if valid_scores and any(s <= URGENT_SCORE_THRESHOLD for s in valid_scores):
-                await self._send_urgent_alert(call, scores, partner_name)
-
-            # Update job status to completed
-            await self.db.qa_analysis_jobs.update_one(
-                {"jobId": job_id},
-                {
-                    "$set": {
-                        "status": QAAnalysisJobStatus.COMPLETED,
-                        "scores": scores,
-                        "updatedAt": datetime.now(timezone.utc).isoformat(),
-                    }
-                },
-            )
-            return {"callId": call_id, "status": "completed", "scores": scores}
+            return {"callId": call_id, "status": "completed", "scores": scores, "call": call}
 
         except Exception as e:
             logger.error(f"Error processing call {call_id}: {str(e)}")
-            await self.db.qa_analysis_jobs.update_one(
-                {"jobId": job_id},
-                {
-                    "$set": {
-                        "status": QAAnalysisJobStatus.FAILED,
-                        "error": str(e),
-                        "updatedAt": datetime.now(timezone.utc).isoformat(),
-                    }
-                },
-            )
             return {"callId": call_id, "status": "failed", "error": str(e)}
 
-    async def batch_analyze(
-        self, partner: PartnerConfig, call_ids: List[int], partner_name: str
-    ) -> Dict[str, Any]:
-        """Queue and process multiple calls for analysis."""
-        now = datetime.now(timezone.utc).isoformat()
-
-        # Create job records in MongoDB
-        for cid in call_ids:
-            job_id = f"{partner.id}_{cid}"
-            await self.db.qa_analysis_jobs.update_one(
-                {"jobId": job_id},
-                {
-                    "$set": {
-                        "jobId": job_id,
-                        "partnerId": partner.id,
-                        "partnerName": partner_name,
-                        "callId": cid,
-                        "status": QAAnalysisJobStatus.QUEUED,
-                        "error": None,
-                        "scores": None,
-                        "updatedAt": now,
-                    },
-                    "$setOnInsert": {"createdAt": now},
-                },
-                upsert=True,
-            )
-
-        total = len(call_ids)
-        await self._emit(partner.id, "start", {"total": total, "pending": total, "callIds": call_ids})
-
-        # Process calls sequentially (each opens an SSH tunnel)
-        results = []
-        completed = 0
-        failed = 0
-        for cid in call_ids:
-            result = await self.process_single_call(partner, cid, partner_name)
-            results.append(result)
-            if result["status"] == "completed":
-                completed += 1
-            else:
-                failed += 1
-            pending = total - completed - failed
-            await self._emit(partner.id, "progress", {
-                "callId": cid,
-                "callStatus": result["status"],
-                "completed": completed,
-                "failed": failed,
-                "pending": pending,
-                "total": total,
-            })
-
-        await self._emit(partner.id, "done", {"total": total, "completed": completed, "failed": failed})
-        self.unsubscribe(partner.id)
-
-        # Clean up finished jobs so they don't pollute next run's status
-        await self.db.qa_analysis_jobs.delete_many({
-            "partnerId": partner.id,
-            "status": {"$in": [QAAnalysisJobStatus.COMPLETED, QAAnalysisJobStatus.FAILED]},
-        })
-
-        return {
-            "total": len(call_ids),
-            "completed": completed,
-            "failed": failed,
-            "results": results,
-        }
-
-    async def get_analysis_status(self, partner_id: str) -> List[Dict[str, Any]]:
-        """Get active (queued/processing) analysis jobs for a partner."""
-        jobs = (
-            await self.db.qa_analysis_jobs.find(
-                {
-                    "partnerId": partner_id,
-                    "status": {"$in": [QAAnalysisJobStatus.QUEUED, QAAnalysisJobStatus.PROCESSING]},
-                },
-                {"_id": 0},
-            )
-            .sort("updatedAt", -1)
-            .to_list(100)
-        )
-        return jobs
-
-    async def _send_urgent_alert(
-        self, call: Dict[str, Any], scores: Dict[str, Any], partner_name: str
-    ):
-        """Send urgent email when any score is <= 3."""
+    async def _get_qa_report_recipients(self) -> List[str]:
+        """Fetch QA report email recipients from system settings."""
         try:
-            contact_name = f"{call.get('contactFirstName', '') or ''} {call.get('contactLastName', '') or ''}".strip()
-            contact_phone = call.get("contactPhone", "N/A")
-            campaign_name = call.get("campaignName", "N/A")
-            duration = call.get("duration", 0)
-            call_id = call.get("id", "N/A")
-
-            def score_color(s):
-                if s is None:
-                    return "#999"
-                return "#c0392b" if s <= URGENT_SCORE_THRESHOLD else "#27ae60"
-
-            vq = scores.get("voiceQuality")
-            lat = scores.get("latency")
-            cq = scores.get("conversationQuality")
-            notes = scores.get("notes", "")
-
-            subject = f"QA Alert — Call #{call_id} scored <= 3 ({partner_name})"
-
-            html_body = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; padding: 20px;">
-                <h2 style="color: #c0392b;">QA Alert — Low Score Detected</h2>
-                <p><strong>Partner:</strong> {partner_name}</p>
-                <table style="border-collapse: collapse; width: 100%; max-width: 600px;">
-                    <tr style="background: #f8f9fa;">
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Call ID</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{call_id}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Contact</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{contact_name} ({contact_phone})</td>
-                    </tr>
-                    <tr style="background: #f8f9fa;">
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Campaign</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{campaign_name}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Duration</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{duration}s</td>
-                    </tr>
-                    <tr style="background: #f8f9fa;">
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Voice Quality</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd; color: {score_color(vq)};"><strong>{vq}</strong>/10</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Latency</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd; color: {score_color(lat)};"><strong>{lat}</strong>/10</td>
-                    </tr>
-                    <tr style="background: #f8f9fa;">
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Conversation Quality</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd; color: {score_color(cq)};"><strong>{cq}</strong>/10</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd;"><strong>Notes</strong></td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{notes}</td>
-                    </tr>
-                </table>
-                <p style="margin-top: 16px; color: #666;"><em>This is an automated QA alert from JobTalk Admin Dashboard.</em></p>
-            </body>
-            </html>
-            """
-
-            text_body = (
-                f"QA Alert — Call #{call_id} scored <= 3 ({partner_name})\n\n"
-                f"Contact: {contact_name} ({contact_phone})\n"
-                f"Campaign: {campaign_name}\n"
-                f"Duration: {duration}s\n"
-                f"Voice Quality: {vq}/10\n"
-                f"Latency: {lat}/10\n"
-                f"Conversation Quality: {cq}/10\n"
-                f"Notes: {notes}\n"
+            setting = await self.db.system_settings.find_one(
+                {"settingKey": "qaReportRecipients"}, {"_id": 0}
             )
+            if setting and setting.get("settingValue"):
+                recipients = [e.strip() for e in str(setting["settingValue"]).split(",") if e.strip()]
+                if recipients:
+                    return recipients
+        except Exception as e:
+            logger.warning(f"Failed to fetch QA report recipients setting: {e}")
+        return None
 
-            to_email = "taj@aptask.com"
+    async def _send_analysis_summary_email(
+        self, results: List[Dict[str, Any]], partner_name: str,
+        report_date: Optional[str] = None
+    ):
+        """Send a final summary email after all calls in a batch have been analyzed."""
+        try:
+            email_date = report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            recipients = await self._get_qa_report_recipients()
 
-            self.email_service.send_email(
-                to_addresses=[to_email],
-                subject=subject,
-                html_body=html_body,
-                text_body=text_body,
+            # Build call list in the format send_qa_report_email expects
+            email_calls = []
+            for r in results:
+                call = r.get("call") or {}
+                scores = r.get("scores") or {}
+                email_calls.append({
+                    "id": r.get("callId"),
+                    "duration": call.get("duration"),
+                    "campaignName": call.get("campaignName"),
+                    "contactFirstName": call.get("contactFirstName"),
+                    "contactLastName": call.get("contactLastName"),
+                    "contactPhone": call.get("contactPhone"),
+                    "qaAnalysis": {
+                        "aiVoiceQuality": scores.get("voiceQuality"),
+                        "aiLatency": scores.get("latency"),
+                        "aiConversationQuality": scores.get("conversationQuality"),
+                        "aiNotes": scores.get("notes", ""),
+                    },
+                })
+
+            completed_count = sum(1 for r in results if r.get("status") == "completed")
+            failed_count = sum(1 for r in results if r.get("status") == "failed")
+            summary_msg = f"AI analysis complete: {completed_count} scored, {failed_count} failed out of {len(results)} total calls."
+
+            await self.email_service.send_qa_report_email(
+                calls=email_calls,
+                date=email_date,
+                to_addresses=recipients,
+                partner_name=partner_name,
+                custom_message=summary_msg,
             )
-
-            logger.info(f"Urgent QA alert sent for call {call_id}")
+            logger.info(f"QA analysis summary email sent for {partner_name} ({len(email_calls)} calls)")
 
         except Exception as e:
-            logger.error(f"Failed to send urgent QA alert: {str(e)}")
+            logger.error(f"Failed to send QA analysis summary email: {str(e)}")
